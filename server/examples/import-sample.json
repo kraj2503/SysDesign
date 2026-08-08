@@ -1,0 +1,29 @@
+{
+  "questions": [
+    {
+      "topicSlug": "load-balancing",
+      "prompt": "Which load-balancing algorithm distributes requests based on the client IP so the same client consistently hits the same backend?",
+      "type": "mcq",
+      "options": ["Round robin", "Least connections", "IP hash", "Weighted round robin"],
+      "correct": [2],
+      "explanation": "IP hash maps each client IP to a backend deterministically, giving session affinity. Round robin and least-connections do not guarantee the same backend each time.",
+      "difficulty": 1,
+      "isTricky": false
+    },
+    {
+      "topicSlug": "caching",
+      "prompt": "A cache is using write-through. What happens to write latency?",
+      "type": "mcq",
+      "options": [
+        "Writes get faster because the cache absorbs them",
+        "Writes pay the cost of updating both cache and storage",
+        "Writes are acknowledged before storage, risking data loss",
+        "Writes are batched and applied asynchronously"
+      ],
+      "correct": [1],
+      "explanation": "Write-through updates the cache and the underlying storage on every write, so each write pays both costs. The data-loss risk belongs to write-back, and batching is not part of write-through.",
+      "difficulty": 2,
+      "isTricky": true
+    }
+  ]
+}
