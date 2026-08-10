@@ -64,8 +64,8 @@ sudo -u "$APP_USER" npm install --no-audit --no-fund
 sudo -u "$APP_USER" npm run build
 
 # --- 5. .env (idempotent) -----------------------------------------------------
+umask 077
 if [ ! -f "$ENV_FILE" ]; then
-  umask 077
   {
     echo "NODE_ENV=production"
     echo "PORT=4000"
@@ -76,12 +76,24 @@ if [ ! -f "$ENV_FILE" ]; then
     echo "# GOOGLE_CLIENT_SECRET="
     echo "# GOOGLE_REDIRECT_URI=https://your-domain.com/api/auth/google/callback"
   } > "$ENV_FILE"
-  chown "$APP_USER:$APP_USER" "$ENV_FILE"
-  chmod 600 "$ENV_FILE"
   echo "==> Wrote $ENV_FILE with a fresh SESSION_SECRET."
 else
-  echo "==> Keeping existing $ENV_FILE (SESSION_SECRET + Google keys preserved)."
+  echo "==> Keeping existing $ENV_FILE."
+  # A half-configured .env (e.g. `cp .env.production .env`) has an EMPTY
+  # SESSION_SECRET=, and the app refuses to start without one. Fill it in
+  # rather than bricking the deploy with a startup crash.
+  if ! grep -qE '^SESSION_SECRET=.+' "$ENV_FILE"; then
+    NEW_SECRET="$(openssl rand -hex 32)"
+    if grep -q '^SESSION_SECRET=' "$ENV_FILE"; then
+      sed -i "s/^SESSION_SECRET=.*/SESSION_SECRET=$NEW_SECRET/" "$ENV_FILE"
+    else
+      echo "SESSION_SECRET=$NEW_SECRET" >> "$ENV_FILE"
+    fi
+    echo "==> Filled in missing/empty SESSION_SECRET."
+  fi
 fi
+chown "$APP_USER:$APP_USER" "$ENV_FILE"
+chmod 600 "$ENV_FILE"
 
 # --- 6. seed only on first deploy ---------------------------------------------
 if [ ! -f "$SERVER_DIR/data/sysdesign.db" ]; then
