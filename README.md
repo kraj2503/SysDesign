@@ -90,7 +90,7 @@ server/src/
       questions.ts    169 questions (64 tricky; MCQ/multi/scenario)
       caseStudies.ts  4 guided design sessions
 client/src/
-  pages/              Dashboard, Syllabus, Lesson, Quiz, CaseStudy, Progress, Import
+  pages/              Dashboard, Syllabus, Lesson, Quiz, CaseStudy, Progress, Results
   components/
     DiagramCanvas.tsx        React Flow renderer for lesson diagrams
     QuizPlayer.tsx           randomized quiz engine (timer, feedback, results)

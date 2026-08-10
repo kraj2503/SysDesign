@@ -137,7 +137,7 @@ All 12 case studies are shipped: 1–4 in Phase 7, 5–8 in Phase 8, 9–12 in P
 - **Authoring rule:** ≥2 sources per question; tricky distractors modeled on misconceptions those sources call out.
 - **Mix:** classic MCQ · tricky gotcha MCQs (⚡ `is_tricky`) · multiple-answer · scenario/estimation.
 - **Quiz flow:** `GET /api/topics/:slug/quiz?count=8` → backend picks random (guaranteed to include tricky) → per-question feedback + explanation → score → `quiz_results` + best score in `progress`.
-- **Import tool:** `POST /api/import` (CSV or JSON) + admin page + sample file + CLI flag.
+- **Import API:** `POST /api/import` (CSV or JSON) + sample files + CLI usage.
 
 ---
 
@@ -210,7 +210,7 @@ All 12 case studies are shipped: 1–4 in Phase 7, 5–8 in Phase 8, 9–12 in P
 ### Phase 7 — Polish + case studies 1–4
 - [x] Case studies 1–4: URL Shortener, Rate Limiter, Unique ID Generator, Key-Value Store — authored & API-verified (5-step each)
 - [x] Streaks on dashboard (`GET /api/quiz/streak`: current + best; verified 0 → 1 after a quiz)
-- [x] Import admin page (`/import`, JSON or CSV) + `server/examples/` samples
+- [x] Import API (`POST /api/import`, CSV or JSON) + `server/examples/` samples
 - [x] Dark theme (dark by default throughout)
 - [x] README + seed CSV example
 
@@ -254,7 +254,7 @@ All 12 case studies are shipped: 1–4 in Phase 7, 5–8 in Phase 8, 9–12 in P
 - [x] `Quiz.tsx` + `QuizPlayer.tsx`: game-like chrome — segmented progress, timer/difficulty/tricky chips,
   letter-badge options with glow states, gradient feedback panels, ring-based results screen + retake.
 - [x] `Progress.tsx`: plain table → visual cards with best-score SVG rings, attempt counts, status chips.
-- [x] `CaseStudy.tsx`, `Import.tsx`, `SimulatorShell.tsx`: restyled to match (stepper pills, step cards,
+- [x] `CaseStudy.tsx`, `SimulatorShell.tsx`: restyled to match (stepper pills, step cards,
   quiz-widget options).
 - [x] **Verified:** `npm run build` (tsc + vite) passes clean; dev smoke test (client :5173 HTTP 200, API
   `/health` → 13 topics / 169 questions).

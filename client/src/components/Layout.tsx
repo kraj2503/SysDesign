@@ -1,12 +1,11 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom'
-import { BookOpen, Database, LayoutDashboard, LogOut, Trophy } from 'lucide-react'
+import { BookOpen, LayoutDashboard, LogOut, Trophy } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
 
 const links = [
   { to: '/', label: 'Dashboard', icon: LayoutDashboard, end: true },
   { to: '/syllabus', label: 'Syllabus', icon: BookOpen, end: false },
   { to: '/progress', label: 'Progress', icon: Trophy, end: false },
-  { to: '/import', label: 'Import', icon: Database, end: false },
 ]
 
 function Logo() {
@@ -38,7 +37,7 @@ function MobileNav() {
       aria-label="Primary"
       className="fixed inset-x-0 bottom-0 z-40 border-t border-white/[0.06] bg-slate-950/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl sm:hidden"
     >
-      <div className="grid grid-cols-4">
+      <div className="grid grid-cols-3">
         {links.map(({ to, label, icon: Icon, end }) => (
           <NavLink
             key={to}

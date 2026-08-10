@@ -91,13 +91,9 @@ app.use(cookieParser())
 // using express-rate-limit's built-in ipKeyGenerator helper.
 function getClientIp(req: express.Request): string {
   // Use the library's helper to properly handle IPv6 addresses
-  const ip = ipKeyGenerator(req)
-  if (isProd) {
-    // In production, trust proxy is enabled so req.ip reflects X-Forwarded-For
-    return ip
-  }
-  // In dev, ignore X-Forwarded-For header entirely — use socket address only
-  return req.socket.remoteAddress || 'unknown'
+  // ipKeyGenerator expects the IP string (req.ip or socket address), not the request object
+  const rawIp = isProd ? (req.ip || req.socket.remoteAddress || 'unknown') : (req.socket.remoteAddress || 'unknown')
+  return ipKeyGenerator(rawIp)
 }
 
 const globalLimiter = rateLimit({

@@ -10,7 +10,6 @@ import Quiz from '@/pages/Quiz'
 import ProgressPage from '@/pages/Progress'
 import Results from '@/pages/Results'
 import ResultsDetail from '@/pages/ResultsDetail'
-import Import from '@/pages/Import'
 import { ProgressProvider } from '@/context/ProgressContext'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
 
@@ -50,7 +49,6 @@ export default function App() {
           <Route path="/progress" element={<ProgressPage />} />
           <Route path="/results" element={<Results />} />
           <Route path="/results/:id" element={<ResultsDetail />} />
-          <Route path="/import" element={<Import />} />
         </Route>
       </Routes>
     </AuthProvider>
