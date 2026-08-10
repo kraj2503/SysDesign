@@ -16,11 +16,13 @@ ExecStart=/opt/sysdesignlab/node_modules/.bin/tsx src/index.ts
 Restart=always
 RestartSec=3
 
-# Hardening (optional but cheap)
+# Hardening. Keep this block minimal: the previous PrivateTmp/ProtectSystem/
+# ReadWritePaths options made the unit die at the NAMESPACE step with ENOENT when
+# /opt/sysdesignlab/server/data was absent. /opt is NOT covered by
+# ProtectSystem=full, so ReadWritePaths there was a no-op anyway, and the app
+# creates server/data itself (db.ts mkdirSync). Add namespace options back one
+# at a time and verify with: systemctl restart sysdesignlab && systemctl status
 NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=full
-ReadWritePaths=/opt/sysdesignlab/server/data
 
 [Install]
 WantedBy=multi-user.target

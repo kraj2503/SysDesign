@@ -48,6 +48,10 @@ echo "==> node $(node -v) · npm $(npm -v)"
 # --- 3. dedicated app user + ownership --------------------------------------
 id -u "$APP_USER" &>/dev/null || useradd --system --home-dir "$APP_DIR" --shell /usr/sbin/nologin "$APP_USER"
 chown -R "$APP_USER:$APP_USER" "$APP_DIR"
+# Guarantee the SQLite data dir exists before the service starts (systemd
+# namespace hardening fails with ENOENT if this path is missing).
+mkdir -p "$SERVER_DIR/data"
+chown "$APP_USER:$APP_USER" "$SERVER_DIR/data"
 
 # --- 4. install + build as the app user --------------------------------------
 cd "$APP_DIR"
