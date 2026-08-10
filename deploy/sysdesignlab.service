@@ -11,7 +11,8 @@ Group=sysdesignlab
 WorkingDirectory=/opt/sysdesignlab/server
 # env.ts loads /opt/sysdesignlab/.env from the repo root (one level up from server/)
 Environment=NODE_ENV=production
-ExecStart=/opt/sysdesignlab/server/node_modules/.bin/tsx src/index.ts
+# npm workspaces hoist tsx to the ROOT node_modules/.bin (server/node_modules doesn't exist)
+ExecStart=/opt/sysdesignlab/node_modules/.bin/tsx src/index.ts
 Restart=always
 RestartSec=3
 

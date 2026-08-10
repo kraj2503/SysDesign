@@ -6,7 +6,7 @@
 #
 # What it does:
 #   1. installs system packages (nginx, build tools, python3 for native modules)
-#   2. installs Node.js 22 via NodeSource if missing
+#   2. installs Node.js 22 via NodeSource if missing or older than 20.12
 #   3. npm install + builds the client
 #   4. writes a root .env with NODE_ENV=production, PORT=4000, a fresh SESSION_SECRET
 #      (keeps the existing file on re-runs so your secret + Google keys survive)
@@ -33,8 +33,13 @@ export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
 apt-get install -y ca-certificates curl git nginx build-essential python3 pkg-config
 
-# --- 2. Node.js 22 ----------------------------------------------------------
-if ! command -v node >/dev/null 2>&1; then
+# --- 2. Node.js (>= 20.12 for process.loadEnvFile; 22 preferred) -------------
+node_ok() {
+  command -v node >/dev/null 2>&1 || return 1
+  node -e 'const [M,m]=process.versions.node.split(".").map(Number); process.exit(M>20||(M===20&&m>=12)?0:1)' 2>/dev/null
+}
+if ! node_ok; then
+  echo "==> Installing Node.js 22 via NodeSource..."
   curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
   apt-get install -y nodejs
 fi
@@ -80,7 +85,13 @@ fi
 # --- 7. systemd unit -----------------------------------------------------------
 install -m 644 "$APP_DIR/deploy/sysdesignlab.service" "/etc/systemd/system/$SERVICE_NAME.service"
 systemctl daemon-reload
-systemctl enable --now "$SERVICE_NAME"
+systemctl enable "$SERVICE_NAME" >/dev/null
+if systemctl is-active --quiet "$SERVICE_NAME"; then
+  echo "==> Restarting $SERVICE_NAME (new code)"
+  systemctl restart "$SERVICE_NAME"
+else
+  systemctl start "$SERVICE_NAME"
+fi
 
 # --- 8. nginx ------------------------------------------------------------------
 install -m 644 "$APP_DIR/deploy/nginx.sysdesignlab" "/etc/nginx/sites-available/$SERVICE_NAME"
