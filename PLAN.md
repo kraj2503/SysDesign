@@ -259,6 +259,100 @@ All 12 case studies are shipped: 1–4 in Phase 7, 5–8 in Phase 8, 9–12 in P
 - [x] **Verified:** `npm run build` (tsc + vite) passes clean; dev smoke test (client :5173 HTTP 200, API
   `/health` → 13 topics / 169 questions).
 
+### Phase 11 — Auth + per-user progress + quiz history (2026-08-09 — shipped)
+> User request (2026-08-09): *"progress and quizzes aren't working; give users a way to see past quiz
+> results with questions & answers; the site will be deployed with login (id/pass + Google OAuth). Plan it,
+> store it here, and design a skill before building."* → A Claude Code skill exists at
+> `.claude/skills/auth-progress/SKILL.md` to implement this phase.
+
+**Problems confirmed by runtime probe (2026-08-09):**
+- **No unlock/lock cascade.** Seed creates no `progress` rows and `/api/topics` defaults every topic to
+  `unlocked`, so nothing is ever `locked`. The syllabus/lesson "Locked" UI is dead code and the
+  "finish the quiz to unlock the next" promise is unimplemented server-side.
+- **Passing a quiz never marks the topic completed.** `POST /api/quiz/results` only updates
+  `quiz_best_score`/`quiz_attempts` (probe: 8/8 = 100% → status stays `unlocked`). The client calls
+  `PUT /api/progress/:slug` separately; nothing unlocks the next topic.
+- **No quiz history.** `GET /api/quiz/results` → 404. Stored `answers_json` is only `[{id, selected}]` —
+  no snapshot of prompt/options/correct/explanation — so "past results with questions & answers" is
+  impossible today.
+- **Everything is global.** `progress`, `quiz_results`, and the streak are shared by every visitor; there
+  is no user concept at all.
+
+**Decisions (confirmed with user):**
+- **Auth:** email + password **and** Google OAuth. JWT in an HttpOnly cookie (SameSite=Lax, Secure in prod);
+  password hashing with bcrypt; Google via authorization-code flow verifying the id_token (no Passport).
+- **Deployment:** single-origin — Express serves the built client statically in production with an SPA
+  fallback so API + auth share one origin and cookies "just work".
+- **Progress:** per-user. First topic unlocked; passing topic N's quiz (≥ 60%) marks it completed and
+  unlocks topic N+1. All reads/writes scoped by `user_id`.
+- **Quiz history:** snapshot every attempt (prompt, options, correct, selected, explanation, is_tricky,
+  score, total, percent, taken_at); new list + detail endpoints; new client Review page.
+
+### 11.1 Database — `server/src/db.ts` (+ seed unchanged)
+- [x] `users` table added; `progress` re-keyed to `PRIMARY KEY(user_id, topic_id)`; `quiz_results` gains
+      `user_id`; seed `reset()` drops `users` too (re-seed migrates cleanly).
+- `users` table: `id`, `email UNIQUE`, `password_hash` (nullable), `google_sub UNIQUE` (nullable),
+  `name`, `avatar_url`, `created_at`.
+- `progress`: PK becomes `(user_id, topic_id)`; add `user_id`; keep status/best/attempts/completed_at.
+- `quiz_results`: add `user_id`; `answers_json` now stores a **full snapshot array** (see 11.4).
+
+### 11.2 Auth — new `server/src/routes/auth.ts` + `server/src/middleware/auth.ts`
+- [x] Deps (`jsonwebtoken`, `bcryptjs`, `cookie-parser`, `google-auth-library`), `middleware/auth.ts`
+      (signToken, cookie set/clear, `requireAuth`, `optionalAuth`), `routes/auth.ts` (register/login/
+      logout/me/google/callback), wired in `index.ts` with `cookieParser()`; `.env.example` + README env docs.
+- `POST /api/auth/register` (name, email, password) · `POST /api/auth/login` · `POST /api/auth/logout` ·
+  `GET /api/auth/me` · `GET /api/auth/google` (redirect w/ CSRF state) · `GET /api/auth/google/callback`.
+- `requireAuth` middleware: verify JWT from HttpOnly cookie → attach `req.userId`.
+- New deps (server): `jsonwebtoken`, `bcryptjs`, `cookie-parser`, `google-auth-library`.
+- Env: `SESSION_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `GOOGLE_REDIRECT_URI`.
+
+### 11.3 Progress fix — `server/src/routes/progress.ts`, `topics.ts`, `quiz.ts`
+- [x] All routes require auth + scope by `req.userId`; `GET /topics` defaults first topic `unlocked`,
+      rest `locked`; `POST /quiz/results` runs in one transaction (insert snapshot → upsert progress →
+      `pct ≥ 60` marks completed + unlocks next topic in order); streak filtered per user.
+- All progress/quiz/streak queries filtered by `req.userId`.
+- `GET /api/topics`: per-user default — first topic `unlocked`, rest `locked` when no progress row.
+- `POST /api/quiz/results` (single transaction): insert snapshot result → upsert progress → if
+  `pct ≥ 60` mark `completed` → unlock next topic in order (`status = 'unlocked'`).
+- `PUT /api/progress/:slug`: keep, now scoped to the user.
+- Streak computed per user.
+
+### 11.4 Quiz history — `server/src/routes/quiz.ts` + client
+- [x] `GET /api/quiz/results` (+ `?topic=`) and `GET /api/quiz/results/:id` (ownership-checked);
+      `answers_json` stores a full snapshot per question; `POST /results` returns `result_id`.
+- `GET /api/quiz/results?topic=slug` → `[{ id, topicSlug, score, total, percent, takenAt }]` (per user).
+- `GET /api/quiz/results/:id` → full snapshot incl. per-question prompt/options/selected/correct/explanation.
+- `submitQuizResult` payload changes from `[{id, selected}]` to the full snapshot object per question.
+
+### 11.5 Client — auth + review UI
+- [x] `AuthContext` (boot `/me`, login/register/logout); `Auth` page `/auth` (tabs + Google button,
+      `?google=error` handling); `Results` + `ResultsDetail` pages; `RequireAuth` guard around all data
+      routes; user chip + logout in `Layout`; "View past results" links from quiz finished screen and
+      Progress page; `QuizPlayer` sends full snapshots and relies on the server for completion/unlock.
+- `AuthContext` (mirrors `ProgressContext`): boot-time `GET /api/auth/me`, login/register/logout, route guard.
+- `Auth` page `/auth`: login/register tabs + "Sign in with Google".
+- `Results` page `/results` (list) and `/results/:id` (question-by-question review); linked from the quiz
+  finished screen and Progress page.
+- All data pages protected; same-origin fetch sends the cookie automatically.
+
+### 11.6 Deployment — `server/src/index.ts`, `client/vite.config.ts`, README
+- [x] `index.ts` serves `client/dist` + SPA fallback (skips `/api/*` and asset paths → 404) when
+      `NODE_ENV=production` or `CLIENT_DIST`; `.env` loaded via `server/src/env.ts`; README quick-start,
+      auth section, deploy note, and API table updated.
+- Prod: `express.static(client/dist)` + SPA fallback to `index.html` when `NODE_ENV=production`.
+- `cookie-parser`; cookie flags `httpOnly`, `sameSite:'lax'`, `secure` in prod.
+- `.env.example` in README: `PORT`, `SESSION_SECRET`, `GOOGLE_*`, `NODE_ENV`.
+
+### 11.7 Verification
+- [x] All 7 checks passed live — see the Phase 11 verification run below.
+1. No cookie → `GET /api/topics` = 401. Register → first topic `unlocked`, rest `locked`.
+2. Topic 1 quiz at 100% → topic 1 `completed`, topic 2 `unlocked`.
+3. Submit twice → best score maxes, attempts increments, list shows 2 results.
+4. `GET /api/quiz/results/:id` snapshot renders on Review page (your answer vs correct + explanation).
+5. Google OAuth happy path (test client) + failure path.
+6. Two users: progress/results are isolated.
+7. `npm run build` + prod single-port smoke test (static client + API + auth on one origin).
+
 ---
 
 ## Verification
@@ -290,6 +384,24 @@ All 12 case studies are shipped: 1–4 in Phase 7, 5–8 in Phase 8, 9–12 in P
 - `npm run dev` smoke test: Vite client serves HTTP 200 on :5173; API `/health` on :4000 returns `topicCount: 13`, `questionCount: 169`.
 - Client-only changes — server untouched, content untouched, no re-seed required.
 - Design constraints honored: zero `<img>` assets / screenshots added; all visual flair is CSS gradients, SVG (`ProgressRing`), and lucide icons.
+
+**Phase 11 verification run — 2026-08-09 (passing):**
+- **Auth:** no cookie → `GET /api/topics` 401; register → HttpOnly cookie set → topic 1 `unlocked`, rest `locked`;
+  login/logout/`/me` verified; bad creds → 401, short password → 400, duplicate email → 409, unconfigured
+  `/api/auth/google` → 503, callback without valid state → redirect `/auth?google=error`.
+- **Unlock cascade:** 8/8 quiz on topic 1 → topic 1 `completed` (best 100), topic 2 `unlocked`, topic 3 still
+  `locked`; re-submit at 4/8 → best stays 100, attempts = 2.
+- **Quiz history:** `GET /api/quiz/results` → 2 entries (newest first); `GET /api/quiz/results/:id` → full
+  snapshot per question (prompt/options/correct/selected/explanation/is_tricky).
+- **Per-user isolation:** second user's topics/results/streaks independent; reading another user's result id
+  → 404 (ownership check).
+- **Production single-origin:** `NODE_ENV=production` serves `client/dist` + SPA fallback (200 on `/`, `/results`,
+  `/auth`; JSON on `/api/*`; missing asset → 404); full register → quiz → results loop on one origin.
+- `npm run build` (tsc + vite) and server `tsc --noEmit` both pass clean.
+- **Deviation:** browser-level UI automation wasn't available (no playwright/chromium-cli in the env). Client was
+  verified via `tsc`, `vite build`, per-module transform through the Vite dev proxy (all 200), and the full auth →
+  quiz → results round-trip through the proxy with cookies. Google code-exchange path not exercised live (needs a
+  real test client id/secret); upsert/state logic covered by the guard-path checks.
 
 **Phase 9 verification run — 2026-08-09 (passing):**
 - Authored 4 new 5-step sessions (requirements → estimation → assemble → deep dive → recap quiz) in

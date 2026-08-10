@@ -11,6 +11,8 @@ export default function SimulatorShell({ title, steps }: SimulatorShellProps) {
   const [index, setIndex] = useState(0)
   const [revealed, setRevealed] = useState(false)
   const [completed, setCompleted] = useState<boolean[]>(() => steps.map(() => false))
+  // Answers live here (not mutated into step.content) so restart/back-navigation reset cleanly.
+  const [answers, setAnswers] = useState<Record<string, unknown>>({})
 
   const step = steps[index]
 
@@ -23,7 +25,10 @@ export default function SimulatorShell({ title, steps }: SimulatorShellProps) {
     setIndex(0)
     setRevealed(false)
     setCompleted(steps.map(() => false))
+    setAnswers({})
   }
+
+  const setStepAnswer = (v: unknown) => setAnswers((prev) => ({ ...prev, [step.id]: v }))
 
   const allDone = completed.every(Boolean)
 
@@ -60,7 +65,7 @@ export default function SimulatorShell({ title, steps }: SimulatorShellProps) {
               <button
                 onClick={() => !revealed && setIndex(i)}
                 disabled={revealed}
-                className={`inline-flex items-center gap-2 rounded-full py-1.5 pl-1.5 pr-3.5 text-xs font-medium transition-all duration-200 ${
+                className={`inline-flex items-center gap-2 rounded-full py-2 pl-1.5 pr-3.5 text-xs font-medium transition-all duration-200 ${
                   isDone
                     ? 'bg-emerald-500/15 text-emerald-300'
                     : isActive
@@ -104,6 +109,8 @@ export default function SimulatorShell({ title, steps }: SimulatorShellProps) {
           <StepWidget
             step={step}
             revealed={revealed}
+            value={answers[step.id]}
+            onAnswer={setStepAnswer}
             onCheck={() => {
               setCompleted((c) => c.map((v, i) => (i === index ? true : v)))
               setRevealed(true)
@@ -128,27 +135,57 @@ export default function SimulatorShell({ title, steps }: SimulatorShellProps) {
 function StepWidget({
   step,
   revealed,
+  value,
+  onAnswer,
   onCheck,
 }: {
   step: CaseStudyStep
   revealed: boolean
+  value: unknown
+  onAnswer: (v: unknown) => void
   onCheck: () => void
 }) {
   const content = step.content
   const isCorrect = useMemo(() => {
-    if (revealed) return computeCorrect(step)
+    if (revealed) return computeCorrect(step, value)
     return false
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [revealed, step])
+  }, [revealed, step, value])
 
   return (
     <div className="space-y-4">
       <div className="min-h-[220px]">
-        {step.type === 'requirements' && <RequirementsWidget content={content} revealed={revealed} />}
-        {step.type === 'estimation' && <EstimationWidget content={content} revealed={revealed} />}
-        {step.type === 'assemble' && <AssembleWidget content={content} revealed={revealed} />}
-        {step.type === 'deepdive' && <QuizWidget content={content} revealed={revealed} />}
-        {step.type === 'quiz' && <QuizWidget content={content} revealed={revealed} />}
+        {step.type === 'requirements' && (
+          <RequirementsWidget
+            content={content}
+            revealed={revealed}
+            value={(value as { selected?: string[] } | undefined)?.selected ?? []}
+            onChange={(selected) => onAnswer({ selected })}
+          />
+        )}
+        {step.type === 'estimation' && (
+          <EstimationWidget
+            content={content}
+            revealed={revealed}
+            value={(value as { inputs?: Record<string, string> } | undefined)?.inputs ?? {}}
+            onChange={(inputs) => onAnswer({ inputs })}
+          />
+        )}
+        {step.type === 'assemble' && (
+          <AssembleWidget
+            content={content}
+            revealed={revealed}
+            value={(value as { order?: string[] } | undefined)?.order ?? []}
+            onChange={(order) => onAnswer({ order })}
+          />
+        )}
+        {(step.type === 'deepdive' || step.type === 'quiz') && (
+          <QuizWidget
+            content={content}
+            revealed={revealed}
+            value={(value as { selections?: Record<number, number[]> } | undefined)?.selections ?? {}}
+            onChange={(selections) => onAnswer({ selections })}
+          />
+        )}
       </div>
 
       {!revealed && (
@@ -176,17 +213,17 @@ function StepWidget({
   )
 }
 
-function computeCorrect(step: CaseStudyStep): boolean {
+function computeCorrect(step: CaseStudyStep, answer: unknown): boolean {
   switch (step.type) {
     case 'requirements': {
-      const c = step.content as { selected?: string[]; correct: string[] }
-      const sel = c.selected ?? []
-      return sel.length === c.correct.length && c.correct.every((id) => sel.includes(id))
+      const sel = (answer as { selected?: string[] } | undefined)?.selected ?? []
+      const correct = (step.content as { correct: string[] }).correct
+      return sel.length === correct.length && correct.every((id) => sel.includes(id))
     }
     case 'estimation': {
-      const c = step.content as { inputs?: Record<string, string>; items: { id: string; answer: number }[] }
-      const inputs = c.inputs ?? {}
-      return c.items.every((it) => {
+      const inputs = (answer as { inputs?: Record<string, string> } | undefined)?.inputs ?? {}
+      const items = (step.content as { items: { id: string; answer: number }[] }).items
+      return items.every((it) => {
         const raw = Number(inputs[it.id])
         if (!Number.isFinite(raw)) return false
         const diff = Math.abs(raw - it.answer)
@@ -194,15 +231,15 @@ function computeCorrect(step: CaseStudyStep): boolean {
       })
     }
     case 'assemble': {
-      const c = step.content as { order?: string[]; correctOrder: string[] }
-      const order = c.order ?? []
-      return order.length === c.correctOrder.length && c.correctOrder.every((id, i) => order[i] === id)
+      const order = (answer as { order?: string[] } | undefined)?.order ?? []
+      const correctOrder = (step.content as { correctOrder: string[] }).correctOrder
+      return order.length === correctOrder.length && correctOrder.every((id, i) => order[i] === id)
     }
     case 'deepdive':
     case 'quiz': {
-      const c = step.content as { selections?: Record<number, number[]>; questions: SimQuestion[] }
-      const selections = c.selections ?? {}
-      return c.questions.every((q, qi) => {
+      const selections = (answer as { selections?: Record<number, number[]> } | undefined)?.selections ?? {}
+      const questions = (step.content as { questions: SimQuestion[] }).questions
+      return questions.every((q, qi) => {
         const sel = selections[qi] ?? []
         return sel.length === q.correct.length && q.correct.every((x) => sel.includes(x))
       })
@@ -212,15 +249,22 @@ function computeCorrect(step: CaseStudyStep): boolean {
 
 /* ------------------------------ requirements ------------------------------ */
 
-function RequirementsWidget({ content, revealed }: { content: unknown; revealed: boolean }) {
-  const c = content as { options: RequirementOption[]; correct: string[]; selected?: string[] }
-  const [selected, setSelected] = useState<string[]>(c.selected ?? [])
+function RequirementsWidget({
+  content,
+  value,
+  onChange,
+  revealed,
+}: {
+  content: unknown
+  value: string[]
+  onChange: (selected: string[]) => void
+  revealed: boolean
+}) {
+  const c = content as { options: RequirementOption[]; correct: string[] }
+  const selected = value
 
   const toggle = (id: string) =>
-    setSelected((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
-
-  // stash selection so computeCorrect can see it
-  c.selected = selected
+    onChange(selected.includes(id) ? selected.filter((x) => x !== id) : [...selected, id])
 
   return (
     <div className="space-y-3">
@@ -269,11 +313,19 @@ function RequirementsWidget({ content, revealed }: { content: unknown; revealed:
 
 /* ------------------------------- estimation ------------------------------- */
 
-function EstimationWidget({ content, revealed }: { content: unknown; revealed: boolean }) {
-  const c = content as { items: { id: string; label: string; prompt: string; answer: number; unit: string }[]; inputs?: Record<string, string> }
-  const [inputs, setInputs] = useState<Record<string, string>>(c.inputs ?? {})
-
-  c.inputs = inputs
+function EstimationWidget({
+  content,
+  value,
+  onChange,
+  revealed,
+}: {
+  content: unknown
+  value: Record<string, string>
+  onChange: (inputs: Record<string, string>) => void
+  revealed: boolean
+}) {
+  const c = content as { items: { id: string; label: string; prompt: string; answer: number; unit: string }[] }
+  const inputs = value
 
   return (
     <div className="space-y-4">
@@ -292,7 +344,7 @@ function EstimationWidget({ content, revealed }: { content: unknown; revealed: b
               <input
                 type="number"
                 value={inputs[it.id] ?? ''}
-                onChange={(e) => !revealed && setInputs((p) => ({ ...p, [it.id]: e.target.value }))}
+                onChange={(e) => !revealed && onChange({ ...inputs, [it.id]: e.target.value })}
                 disabled={revealed}
                 placeholder="≈"
                 className={`w-32 rounded-lg border bg-slate-900 px-3 py-1.5 text-sm outline-none ${
@@ -326,22 +378,29 @@ const KIND_STYLE: Record<string, { bg: string; border: string }> = {
   other: { bg: '#334155', border: '#94a3b8' },
 }
 
-function AssembleWidget({ content, revealed }: { content: unknown; revealed: boolean }) {
+function AssembleWidget({
+  content,
+  value,
+  onChange,
+  revealed,
+}: {
+  content: unknown
+  value: string[]
+  onChange: (order: string[]) => void
+  revealed: boolean
+}) {
   const c = content as {
     components: { id: string; label: string; kind: string }[]
     correctOrder: string[]
-    order?: string[]
   }
-  const [order, setOrder] = useState<string[]>(c.order ?? [])
-
-  c.order = order
+  const order = value
 
   const add = (id: string) => {
     if (order.includes(id)) return
-    setOrder((o) => [...o, id])
+    onChange([...order, id])
   }
 
-  const removeLast = () => setOrder((o) => o.slice(0, -1))
+  const removeLast = () => onChange(order.slice(0, -1))
 
   return (
     <div className="space-y-4">
@@ -359,8 +418,8 @@ function AssembleWidget({ content, revealed }: { content: unknown; revealed: boo
               key={comp.id}
               onClick={() => !revealed && !used && add(comp.id)}
               disabled={revealed || used}
-              className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition ${
-                used ? 'opacity-30' : 'hover:scale-105'
+              className={`rounded-lg border px-3.5 py-2 text-xs font-semibold transition-colors ${
+                used ? 'opacity-30' : 'hover:bg-white/[0.06]'
               }`}
               style={{ background: st.bg, borderColor: st.border, color: '#f8fafc' }}
             >
@@ -379,7 +438,7 @@ function AssembleWidget({ content, revealed }: { content: unknown; revealed: boo
           return (
             <div key={id} className="flex items-center gap-2">
               <div
-                className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${
+                className={`rounded-lg border px-3.5 py-2 text-xs font-semibold ${
                   revealed && !inRightPlace ? 'ring-2 ring-rose-500/70' : ''
                 }`}
                 style={{ background: st.bg, borderColor: st.border, color: '#f8fafc' }}
@@ -407,18 +466,25 @@ function AssembleWidget({ content, revealed }: { content: unknown; revealed: boo
 
 /* ---------------------------- deep dive / quiz ----------------------------- */
 
-function QuizWidget({ content, revealed }: { content: unknown; revealed: boolean }) {
-  const c = content as { questions: SimQuestion[]; selections?: Record<number, number[]> }
-  const [selections, setSelections] = useState<Record<number, number[]>>(c.selections ?? {})
+function QuizWidget({
+  content,
+  value,
+  onChange,
+  revealed,
+}: {
+  content: unknown
+  value: Record<number, number[]>
+  onChange: (selections: Record<number, number[]>) => void
+  revealed: boolean
+}) {
+  const c = content as { questions: SimQuestion[] }
+  const selections = value
 
-  c.selections = selections
-
-  const toggle = (qi: number, opt: number) =>
-    setSelections((prev) => {
-      const cur = prev[qi] ?? []
-      const next = cur.includes(opt) ? cur.filter((x) => x !== opt) : [...cur, opt]
-      return { ...prev, [qi]: next }
-    })
+  const toggle = (qi: number, opt: number) => {
+    const cur = selections[qi] ?? []
+    const next = cur.includes(opt) ? cur.filter((x) => x !== opt) : [...cur, opt]
+    onChange({ ...selections, [qi]: next })
+  }
 
   return (
     <div className="space-y-6">

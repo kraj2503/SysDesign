@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowRight, Compass, Flame, Layers, Sparkles, Target, Zap } from 'lucide-react'
+import { ArrowRight, BookOpen, Compass, Flame, Layers, Sparkles, Target, Zap } from 'lucide-react'
 import { api } from '@/api/client'
 import { useProgress } from '@/context/ProgressContext'
 import type { CaseStudy, HealthResponse } from '@/types'
@@ -10,11 +10,16 @@ import { tileGradient } from '@/lib/ui'
 export default function Dashboard() {
   const { topics, progress, loading } = useProgress()
   const [health, setHealth] = useState<HealthResponse | null>(null)
+  const [healthLoaded, setHealthLoaded] = useState(false)
   const [caseStudies, setCaseStudies] = useState<CaseStudy[]>([])
   const [streak, setStreak] = useState<{ streak: number; best: number } | null>(null)
 
   useEffect(() => {
-    api.health().then(setHealth).catch(() => setHealth(null))
+    api
+      .health()
+      .then(setHealth)
+      .catch(() => setHealth(null))
+      .finally(() => setHealthLoaded(true))
     api.listCaseStudies().then(setCaseStudies).catch(() => setCaseStudies([]))
     api.getStreak().then(setStreak).catch(() => setStreak(null))
   }, [])
@@ -32,7 +37,7 @@ export default function Dashboard() {
         <div className="pointer-events-none absolute -bottom-28 right-1/3 h-72 w-72 rounded-full bg-fuchsia-600/15 blur-3xl" />
 
         <div className="relative max-w-2xl">
-          <span className="chip animate-glow-pulse mb-5 border-cyan-500/30 bg-cyan-500/10 text-cyan-300">
+          <span className="chip mb-5 border-cyan-500/30 bg-cyan-500/10 text-cyan-300">
             <Sparkles className="h-3.5 w-3.5" /> Interactive · scenario-driven · tricky-question packed
           </span>
           <h1 className="font-display text-4xl font-bold leading-[1.08] tracking-tight text-white sm:text-5xl">
@@ -60,7 +65,11 @@ export default function Dashboard() {
             </span>
             <span className="chip">
               <Zap className="h-3.5 w-3.5 text-amber-300" />
-              {health ? `${health.questionCount}+ questions` : 'loading questions…'}
+              {health
+                ? `${health.questionCount}+ questions`
+                : healthLoaded
+                  ? 'question count unavailable'
+                  : 'loading questions…'}
             </span>
             <span className="chip">
               <Target className="h-3.5 w-3.5 text-emerald-300" /> {caseStudies.length} case studies
@@ -79,7 +88,11 @@ export default function Dashboard() {
           accent="text-cyan-300"
         />
         <StatCard
-          icon={<ProgressRing value={attempts ? Math.min(100, attempts * 12) : 0} size={52} stroke={5} from="#a78bfa" to="#e879f9"><span className="font-display text-sm font-bold text-white">{attempts || 0}</span></ProgressRing>}
+          icon={
+            <div className="flex h-[52px] w-[52px] items-center justify-center rounded-full border border-violet-400/20 bg-violet-400/10">
+              <BookOpen className="h-6 w-6 text-violet-300" />
+            </div>
+          }
           label="Quizzes taken"
           value={String(attempts)}
           sub="each one randomized"
@@ -208,7 +221,7 @@ function StatCard({
   return (
     <div className="card card-hover p-5">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-wider text-slate-500">{label}</span>
+        <span className="text-xs font-medium uppercase tracking-wider text-slate-400">{label}</span>
         {icon}
       </div>
       <div className={`mt-2 font-display text-3xl font-bold tracking-tight ${accent}`}>{value}</div>

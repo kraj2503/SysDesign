@@ -128,13 +128,13 @@ export default function ConsistentHashing() {
         <div className="flex gap-2">
           <button
             onClick={addNode}
-            className="rounded-lg bg-cyan-500 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-cyan-400"
+            className="rounded-lg bg-cyan-500 px-4 py-2 text-xs font-semibold text-slate-950 hover:bg-cyan-400"
           >
             + Add node
           </button>
           <button
             onClick={removeNode}
-            className="rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-600"
+            className="rounded-lg bg-slate-700 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-600"
           >
             − Remove node
           </button>

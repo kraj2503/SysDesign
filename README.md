@@ -20,11 +20,49 @@ assembling the architecture → deep-dive trade-offs → a recap quiz.
 
 ```bash
 npm install          # installs client + server workspaces
+cp .env.example .env # optional — sets SESSION_SECRET + Google OAuth keys
 npm run seed         # (re)create the DB from content files
 npm run dev          # runs API (:4000) + Vite (:5173) together
 ```
 
 Open http://localhost:5173.
+
+## Auth & accounts
+
+Every user gets their own progress and quiz history. The app is gated behind login:
+
+- **Email + password** — register or log in on the `/auth` page (passwords hashed with bcrypt).
+- **Google OAuth** — set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and `GOOGLE_REDIRECT_URI`
+  in `.env` to enable the "Sign in with Google" button.
+- **Unlock cascade** — the first topic starts unlocked. Passing a topic's quiz (60%+) marks it
+  completed and unlocks the next topic. Everything (progress, results, streaks) is scoped per user.
+- **Quiz history** — every attempt saves a full question-by-question snapshot; review it on the
+  `/results` page.
+
+> In dev (`NODE_ENV` unset) a built-in `SESSION_SECRET` is used so login works out of the box.
+> Set a real secret in production.
+
+## Deploy (single origin)
+
+Build the client and run the API — Express serves the static site and the API from one origin,
+so auth cookies "just work":
+
+```bash
+npm run build        # tsc type-check + vite build -> client/dist
+NODE_ENV=production SESSION_SECRET="$(openssl rand -hex 32)" npm run start
+```
+
+- Set `PORT`, `SESSION_SECRET` (required in production), and `GOOGLE_*` env vars (see `.env.example`).
+- The SPA fallback returns `index.html` for client routes and 404s missing assets; `/api/*` always
+  returns JSON.
+
+### Free hosting: Oracle Cloud Always Free
+
+The app runs **unchanged** on a free always-on Oracle VM (Express + SQLite + built client on one
+origin). See **`deploy/ORACLE.md`** for the console runbook (signup, VM creation, ports) and
+`deploy/deploy.sh` for the one-command setup (Node 22, nginx, systemd, seeding). Deploys are
+idempotent — re-running the script after a `rsync` code push keeps your `SESSION_SECRET`, Google
+keys, and user data.
 
 ## Scripts
 
@@ -85,12 +123,16 @@ CSS gradients, SVG, or [lucide](https://lucide.dev) icons.
 | Endpoint | Purpose |
 |---|---|
 | `GET /api/health` | status + counts |
-| `GET /api/topics` | topics with progress |
+| `POST /api/auth/register` · `POST /api/auth/login` · `POST /api/auth/logout` | email/password auth |
+| `GET /api/auth/me` | current user (or `null`) |
+| `GET /api/auth/google` · `GET /api/auth/google/callback` | Google OAuth flow |
+| `GET /api/topics` | topics with per-user progress (first unlocked, rest locked) |
 | `GET /api/topics/:slug` | topic + lessons (+ diagrams, demos) |
 | `GET /api/topics/:slug/quiz?count=N` | N random questions (tricky guaranteed) |
-| `POST /api/quiz/results` | record a quiz result (best score, attempts) |
-| `GET /api/quiz/streak` | current + best daily streak |
-| `GET /api/progress` · `PUT /api/progress/:slug` | read / update topic status |
+| `POST /api/quiz/results` | record a result + full snapshot; passes mark completed & unlock next |
+| `GET /api/quiz/results` · `GET /api/quiz/results/:id` | quiz history list / detail (per user) |
+| `GET /api/quiz/streak` | current + best daily streak (per user) |
+| `GET /api/progress` · `PUT /api/progress/:slug` | read / update topic status (per user) |
 | `GET /api/case-studies(/:slug)` | guided design sessions |
 | `POST /api/import` | bulk-import questions (JSON or CSV) — see `server/examples/` |
 
@@ -120,3 +162,9 @@ session: requirements → estimation → assemble the architecture → deep-dive
 animated grid + aurora backdrop, glass header, gradient hero, SVG progress rings, styled markdown
 (`.md-content`), game-like quiz chrome, visual progress cards, restyled simulator/import/case-study
 pages. Client-only; no content changes. See `PLAN.md` Phase 10 for the full change list.
+
+**Auth + per-user progress + quiz history** (Phase 11, 2026-08-09): email/password login + Google
+OAuth (JWT in an HttpOnly cookie); a real unlock cascade — passing a topic's quiz marks it completed
+and unlocks the next; per-user progress, streaks, and results; full attempt snapshots with a past-results
+review page (`/results` + `/results/:id`); and single-origin production serving (Express serves the
+built client + API together). See `PLAN.md` Phase 11 for details.

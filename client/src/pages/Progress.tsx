@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { CheckCircle2, ChevronRight, Lock, PlayCircle, Repeat } from 'lucide-react'
+import { CheckCircle2, ChevronRight, History, Lock, PlayCircle, Repeat } from 'lucide-react'
 import { useProgress } from '@/context/ProgressContext'
 import ProgressRing from '@/components/ProgressRing'
 import { ringGradient, tileGradient } from '@/lib/ui'
@@ -35,12 +35,20 @@ export default function ProgressPage() {
             average best score.
           </p>
         </div>
-        <ProgressRing value={pct} size={88} stroke={8} from="#22d3ee" to="#e879f9">
-          <div className="text-center">
-            <div className="font-display text-xl font-bold text-white">{pct}%</div>
-            <div className="text-[10px] uppercase tracking-wider text-slate-500">overall</div>
-          </div>
-        </ProgressRing>
+        <div className="flex flex-col items-center gap-3">
+          <ProgressRing value={pct} size={88} stroke={8} from="#22d3ee" to="#e879f9">
+            <div className="text-center">
+              <div className="font-display text-xl font-bold text-white">{pct}%</div>
+              <div className="text-[10px] uppercase tracking-wider text-slate-400">overall</div>
+            </div>
+          </ProgressRing>
+          <Link
+            to="/results"
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-cyan-300 transition-colors hover:text-cyan-200"
+          >
+            <History className="h-3.5 w-3.5" /> Past results
+          </Link>
+        </div>
       </header>
 
       <div className="reveal delay-1 h-3 overflow-hidden rounded-full bg-slate-800/70 shadow-inner">

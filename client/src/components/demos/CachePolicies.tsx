@@ -39,8 +39,12 @@ function Box({ label, color }: { label: string; color: string }) {
 export default function CachePolicies() {
   const [policy, setPolicy] = useState<Policy>('write-through')
   const d = DETAILS[policy]
-  const toCache = ['write-through', 'write-back'].includes(policy)
-  const toDb = policy !== 'write-back'
+  // write-around never touches the cache; the others all read or write through it.
+  const touchesCache = ['read-through', 'write-through', 'write-back'].includes(policy)
+  // label for the Client → Cache arrow
+  const cacheLabel = policy === 'write-through' || policy === 'write-back' ? 'write' : 'read'
+  // label for the Cache → DB arrow (write-through sync write, write-back async flush, read-through miss read)
+  const dbLabel = policy === 'write-through' ? 'write' : policy === 'write-back' ? 'flush' : 'read'
 
   return (
     <div className="space-y-4">
@@ -49,7 +53,7 @@ export default function CachePolicies() {
           <button
             key={p.id}
             onClick={() => setPolicy(p.id)}
-            className={`rounded-full px-3 py-1.5 text-xs font-medium transition ${
+            className={`rounded-full px-4 py-2 text-xs font-medium transition-colors ${
               policy === p.id
                 ? 'bg-cyan-500/20 text-cyan-300 ring-1 ring-cyan-500/50'
                 : 'bg-slate-800 text-slate-400 hover:text-slate-200'
@@ -62,11 +66,10 @@ export default function CachePolicies() {
 
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/60 p-4">
         <Box label="Client" color="#e2e8f0" />
-        <Arrow to={toCache || toDb} label={toCache ? 'write' : undefined} />
+        <Arrow to={touchesCache} label={touchesCache ? cacheLabel : ''} />
         <Box label="Cache" color="#fb7185" />
-        {toDb && <Arrow to={toDb} label="write" />}
+        <Arrow to={touchesCache} label={touchesCache ? dbLabel : ''} />
         <Box label="DB" color="#a78bfa" />
-        {policy === 'read-through' && <Arrow label="read on miss" />}
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2">

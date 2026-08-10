@@ -19,10 +19,7 @@ function DemoFrame({ hint, children }: { hint: string; children: ReactNode }) {
     <div className="relative overflow-hidden rounded-2xl border border-cyan-500/20 bg-slate-950/60 p-5">
       <div className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full bg-cyan-500/10 blur-3xl" />
       <div className="mb-4 flex flex-wrap items-center gap-2">
-        <span className="relative flex h-2.5 w-2.5">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-cyan-400 opacity-60" />
-          <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-cyan-400" />
-        </span>
+        <span className="inline-flex h-2.5 w-2.5 rounded-full bg-cyan-400 shadow-[0_0_8px_rgba(34,211,238,0.9)]" />
         <span className="text-xs font-semibold uppercase tracking-wider text-cyan-300">Live demo</span>
         <span className="ml-1 inline-flex items-center gap-1 text-xs text-slate-500">
           <MousePointerClick className="h-3.5 w-3.5" /> {hint}

@@ -32,7 +32,7 @@ export default function Syllabus() {
         <ProgressRing value={pct} size={88} stroke={8} from="#22d3ee" to="#e879f9">
           <div className="text-center">
             <div className="font-display text-xl font-bold text-white">{pct}%</div>
-            <div className="text-[10px] uppercase tracking-wider text-slate-500">done</div>
+            <div className="text-[10px] uppercase tracking-wider text-slate-400">done</div>
           </div>
         </ProgressRing>
       </header>
@@ -46,13 +46,12 @@ export default function Syllabus() {
           const best = p?.quiz_best_score ?? 0
 
           return (
-            <li key={t.slug} className="reveal relative" style={{ animationDelay: `${i * 55}ms` }}>
+            <li key={t.slug} className="reveal relative" style={{ animationDelay: `${Math.min(i, 8) * 55}ms` }}>
               <Link
                 to={`/topics/${t.slug}`}
-                aria-disabled={locked}
                 className={`group relative flex items-center gap-4 rounded-2xl border p-4 transition-all duration-300 ${
                   locked
-                    ? 'border-slate-800/70 bg-slate-900/30 opacity-55 hover:opacity-80'
+                    ? 'border-slate-800/70 bg-slate-900/30 opacity-55'
                     : done
                       ? 'border-emerald-500/25 bg-gradient-to-r from-emerald-500/[0.07] to-transparent hover:border-emerald-400/40'
                       : 'border-white/[0.08] bg-slate-900/50 hover:-translate-y-0.5 hover:border-cyan-500/40 hover:bg-slate-900/80 hover:shadow-[0_12px_40px_-14px_rgba(34,211,238,0.4)]'

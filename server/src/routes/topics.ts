@@ -1,36 +1,45 @@
 import { Router } from 'express'
 import { db } from '../db'
-import type { Question, QuestionRow, Topic, TopicProgress } from '../types'
+import { requireAuth, signQuizToken } from '../middleware/auth'
+import type { QuestionRow, Topic, TopicProgress } from '../types'
 
 const router = Router()
+router.use(requireAuth)
 
-function mapQuestion(row: QuestionRow): Question {
+// Public question shape — deliberately excludes `correct` and `explanation`, which are
+// only revealed via POST /api/quiz/check after the user answers. The score is computed
+// server-side at submit time from the DB, so exposing nothing here is what makes
+// client-side forgery impossible.
+function toPublicQuestion(row: QuestionRow) {
   return {
     id: row.id,
     topic_id: row.topic_id,
     prompt: row.prompt,
-    type: row.type as Question['type'],
+    type: row.type,
     options: JSON.parse(row.options_json) as string[],
-    correct: JSON.parse(row.correct_json) as number[],
-    explanation: row.explanation,
     difficulty: row.difficulty,
     is_tricky: Boolean(row.is_tricky),
   }
 }
 
-// GET /api/topics — list topics with progress
-router.get('/', (_req, res) => {
+// GET /api/topics — list topics with per-user progress.
+// When no progress row exists, the first topic defaults to `unlocked`, the rest to `locked`.
+router.get('/', (req, res) => {
   const topics = db
     .prepare(
       `SELECT t.*, p.status AS p_status, p.quiz_best_score, p.quiz_attempts
        FROM topics t
-       LEFT JOIN progress p ON p.topic_id = t.id
+       LEFT JOIN progress p ON p.topic_id = t.id AND p.user_id = ?
        ORDER BY t.order_index`,
     )
-    .all() as (Topic & { p_status: string | null; quiz_best_score: number | null; quiz_attempts: number | null })[]
+    .all(req.userId!) as (Topic & {
+    p_status: string | null
+    quiz_best_score: number | null
+    quiz_attempts: number | null
+  })[]
 
   res.json(
-    topics.map((t) => ({
+    topics.map((t, i) => ({
       id: t.id,
       slug: t.slug,
       title: t.title,
@@ -41,7 +50,7 @@ router.get('/', (_req, res) => {
       progress: {
         topic_id: t.id,
         topic_slug: t.slug,
-        status: (t.p_status ?? 'unlocked') as TopicProgress['status'],
+        status: (t.p_status ?? (i === 0 ? 'unlocked' : 'locked')) as TopicProgress['status'],
         quiz_best_score: t.quiz_best_score,
         quiz_attempts: t.quiz_attempts ?? 0,
       } satisfies TopicProgress,
@@ -49,7 +58,7 @@ router.get('/', (_req, res) => {
   )
 })
 
-// GET /api/topics/:slug — topic with lessons + progress
+// GET /api/topics/:slug — topic with lessons + per-user progress
 router.get('/:slug', (req, res) => {
   const topic = db.prepare('SELECT * FROM topics WHERE slug = ?').get(req.params.slug) as
     | Topic
@@ -67,8 +76,8 @@ router.get('/:slug', (req, res) => {
     }))
 
   const progress = db
-    .prepare('SELECT * FROM progress WHERE topic_id = ?')
-    .get(topic.id) as TopicProgress | undefined
+    .prepare('SELECT * FROM progress WHERE user_id = ? AND topic_id = ?')
+    .get(req.userId!, topic.id) as TopicProgress | undefined
 
   res.json({ ...topic, lessons, progress: progress ?? null })
 })
@@ -91,7 +100,9 @@ router.get('/:slug/lessons/:lessonSlug', (req, res) => {
   })
 })
 
-// GET /api/topics/:slug/quiz?count=N — random questions (tricky guaranteed)
+// GET /api/topics/:slug/quiz?count=N — random questions (tricky guaranteed) + signed token.
+// Returns { questions, token }. The token binds this exact random subset to the user +
+// topic; POST /api/quiz/check and POST /api/quiz/results require it.
 router.get('/:slug/quiz', (req, res) => {
   const topic = db.prepare('SELECT id FROM topics WHERE slug = ?').get(req.params.slug) as
     | { id: number }
@@ -104,7 +115,7 @@ router.get('/:slug/quiz', (req, res) => {
     .prepare('SELECT * FROM questions WHERE topic_id = ?')
     .all(topic.id) as QuestionRow[]
 
-  if (all.length === 0) return res.json([])
+  if (all.length === 0) return res.json({ questions: [], token: null })
 
   const tricky = all.filter((q) => Boolean(q.is_tricky))
   const normal = all.filter((q) => !Boolean(q.is_tricky))
@@ -128,7 +139,8 @@ router.get('/:slug/quiz', (req, res) => {
     ;[selected[i], selected[j]] = [selected[j], selected[i]]
   }
 
-  res.json(selected.map(mapQuestion))
+  const token = signQuizToken(req.userId!, topic.id, selected.map((q) => q.id))
+  res.json({ questions: selected.map(toPublicQuestion), token })
 })
 
 export default router

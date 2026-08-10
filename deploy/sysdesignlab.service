@@ -1,0 +1,25 @@
+# SysDesignLab systemd unit — managed by deploy/deploy.sh.
+# Runs the Express API (tsx) which also serves the built client in production.
+[Unit]
+Description=SysDesignLab API + client
+After=network.target
+
+[Service]
+Type=simple
+User=sysdesignlab
+Group=sysdesignlab
+WorkingDirectory=/opt/sysdesignlab/server
+# env.ts loads /opt/sysdesignlab/.env from the repo root (one level up from server/)
+Environment=NODE_ENV=production
+ExecStart=/opt/sysdesignlab/server/node_modules/.bin/tsx src/index.ts
+Restart=always
+RestartSec=3
+
+# Hardening (optional but cheap)
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/sysdesignlab/server/data
+
+[Install]
+WantedBy=multi-user.target

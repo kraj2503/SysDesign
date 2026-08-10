@@ -58,16 +58,29 @@ export function initSchema() {
       steps_json TEXT NOT NULL DEFAULT '[]'
     );
 
+    CREATE TABLE IF NOT EXISTS users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT,
+      google_sub TEXT UNIQUE,
+      name TEXT,
+      avatar_url TEXT,
+      created_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS progress (
-      topic_id INTEGER PRIMARY KEY REFERENCES topics(id) ON DELETE CASCADE,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      topic_id INTEGER NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
       status TEXT NOT NULL DEFAULT 'unlocked',
       quiz_best_score INTEGER,
       quiz_attempts INTEGER NOT NULL DEFAULT 0,
-      completed_at TEXT
+      completed_at TEXT,
+      PRIMARY KEY (user_id, topic_id)
     );
 
     CREATE TABLE IF NOT EXISTS quiz_results (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       topic_id INTEGER NOT NULL REFERENCES topics(id) ON DELETE CASCADE,
       score INTEGER NOT NULL,
       total INTEGER NOT NULL,
@@ -77,5 +90,7 @@ export function initSchema() {
 
     CREATE INDEX IF NOT EXISTS idx_questions_topic ON questions(topic_id);
     CREATE INDEX IF NOT EXISTS idx_lessons_topic ON lessons(topic_id);
+    CREATE INDEX IF NOT EXISTS idx_progress_user ON progress(user_id);
+    CREATE INDEX IF NOT EXISTS idx_quiz_results_user ON quiz_results(user_id);
   `)
 }

@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { api } from '@/api/client'
 import { useProgress } from '@/context/ProgressContext'
 import type { Question } from '@/types'
-import { ArrowRight, CheckCircle2, RotateCcw, Timer, XCircle, Zap } from 'lucide-react'
+import { ArrowRight, CheckCircle2, History, Loader2, RotateCcw, Timer, XCircle, Zap } from 'lucide-react'
 import ProgressRing from '@/components/ProgressRing'
 
 interface QuizPlayerProps {
@@ -31,7 +32,7 @@ export default function QuizPlayer({
   timePerQuestionSec = 45,
   passThreshold = 60,
 }: QuizPlayerProps) {
-  const { markCompleted } = useProgress()
+  const { refresh } = useProgress()
   const [questions, setQuestions] = useState<Question[] | null>(null)
   const [error, setError] = useState<string | null>(null)
 
@@ -41,7 +42,11 @@ export default function QuizPlayer({
   const [answers, setAnswers] = useState<AnswerRecord[]>([])
   const [finished, setFinished] = useState(false)
   const [submitted, setSubmitted] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [submitError, setSubmitError] = useState<string | null>(null)
+  const [resultId, setResultId] = useState<number | null>(null)
   const [secondsLeft, setSecondsLeft] = useState(timePerQuestionSec)
+  const [retakeNonce, setRetakeNonce] = useState(0)
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -50,7 +55,7 @@ export default function QuizPlayer({
       .getQuiz(topicSlug, count)
       .then(setQuestions)
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load quiz'))
-  }, [topicSlug, count])
+  }, [topicSlug, count, retakeNonce])
 
   const current = questions?.[index] ?? null
 
@@ -114,22 +119,52 @@ export default function QuizPlayer({
   const percent = questions?.length ? Math.round((score / questions.length) * 100) : 0
 
   const handleSubmit = useCallback(async () => {
-    if (submitted) return
-    setSubmitted(true)
+    if (submitted || saving) return
+    setSaving(true)
+    setSubmitError(null)
     try {
-      await api.submitQuizResult({
+      const res = await api.submitQuizResult({
         topic_slug: topicSlug,
         score,
         total: questions?.length ?? 0,
-        answers: answers.map((a) => ({ id: a.question.id, selected: a.selected })),
+        answers: answers.map((a) => ({
+          question_id: a.question.id,
+          prompt: a.question.prompt,
+          type: a.question.type,
+          options: a.question.options,
+          correct: a.question.correct,
+          selected: a.selected,
+          explanation: a.question.explanation,
+          is_tricky: a.question.is_tricky,
+        })),
       })
-      if (percent >= passThreshold) await markCompleted(topicSlug)
-    } catch {
-      // non-fatal: quiz is still done locally
+      setResultId(res.result_id)
+      // The server marks the topic completed + unlocks the next one — refresh to reflect it.
+      await refresh()
+      setSubmitted(true)
+    } catch (e) {
+      // Keep the quiz on screen and let the user retry — never claim it was saved.
+      setSubmitError(e instanceof Error ? e.message : 'Failed to save result — check your connection and try again.')
+    } finally {
+      setSaving(false)
     }
-  }, [submitted, topicSlug, score, questions?.length, answers, percent, passThreshold, markCompleted])
+  }, [submitted, saving, topicSlug, score, questions?.length, answers, refresh])
 
-  if (error) return <p className="text-sm text-red-400">{error}</p>
+  // In-app retake: reset every piece of local state and re-fetch a fresh random quiz.
+  const handleRetake = useCallback(() => {
+    setIndex(0)
+    setSelected([])
+    setRevealed(false)
+    setAnswers([])
+    setFinished(false)
+    setSubmitted(false)
+    setSubmitError(null)
+    setResultId(null)
+    setQuestions(null)
+    setRetakeNonce((n) => n + 1)
+  }, [])
+
+  if (error) return <p className="text-sm text-rose-400">{error}</p>
   if (!questions) return <p className="text-sm text-slate-400">Loading questions…</p>
   if (questions.length === 0) return <p className="text-sm text-slate-400">No questions for this topic yet.</p>
 
@@ -159,7 +194,7 @@ export default function QuizPlayer({
               >
                 <div className="text-center">
                   <div className="font-display text-3xl font-bold text-white">{percent}%</div>
-                  <div className="text-[10px] uppercase tracking-wider text-slate-500">score</div>
+                  <div className="text-[10px] uppercase tracking-wider text-slate-400">score</div>
                 </div>
               </ProgressRing>
             </div>
@@ -170,20 +205,43 @@ export default function QuizPlayer({
                 : `Need ${passThreshold}% to pass — retry anytime to improve your best score.`}
             </p>
 
-            <div className="mt-5 flex items-center justify-center gap-3">
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-3">
               {!submitted ? (
-                <button onClick={() => void handleSubmit()} className="btn-primary">
-                  <CheckCircle2 className="h-4 w-4" /> Save result
+                <button onClick={() => void handleSubmit()} disabled={saving} className="btn-primary">
+                  {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+                  {saving ? 'Saving…' : 'Save result'}
                 </button>
               ) : (
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1.5 text-xs font-medium text-emerald-300">
                   <CheckCircle2 className="h-4 w-4" /> Result saved
                 </span>
               )}
-              <button onClick={() => window.location.reload()} className="btn-ghost">
+              <button onClick={handleRetake} className="btn-ghost">
                 <RotateCcw className="h-4 w-4" /> Retake
               </button>
             </div>
+
+            {submitError && (
+              <p className="mt-3 text-xs font-medium text-rose-300" role="alert">
+                {submitError}
+              </p>
+            )}
+
+            {submitted && (
+              <div className="mt-4 flex flex-wrap items-center justify-center gap-3 text-sm">
+                {resultId != null && (
+                  <Link to={`/results/${resultId}`} className="btn-ghost">
+                    <History className="h-4 w-4" /> Review this attempt
+                  </Link>
+                )}
+                <Link
+                  to="/results"
+                  className="inline-flex items-center gap-1.5 text-xs font-medium text-cyan-300 transition-colors hover:text-cyan-200"
+                >
+                  <History className="h-3.5 w-3.5" /> View past results
+                </Link>
+              </div>
+            )}
           </div>
         </div>
 
@@ -284,7 +342,7 @@ export default function QuizPlayer({
         {questions.map((_, i) => (
           <span
             key={i}
-            className={`h-1.5 flex-1 rounded-full transition-all duration-500 ${
+            className={`h-1.5 flex-1 rounded-full transition-all duration-200 ${
               i < index
                 ? 'bg-cyan-400'
                 : i === index
@@ -292,7 +350,7 @@ export default function QuizPlayer({
                     ? isCorrect
                       ? 'bg-emerald-400'
                       : 'bg-rose-400'
-                    : 'animate-glow-pulse bg-gradient-to-r from-cyan-400 to-indigo-500'
+                    : 'bg-gradient-to-r from-cyan-400 to-indigo-500'
                   : 'bg-slate-800'
             }`}
           />
@@ -322,7 +380,7 @@ export default function QuizPlayer({
                     : isSelected
                       ? 'border-cyan-400/60 bg-cyan-500/10 text-cyan-100 shadow-[0_0_24px_-8px_rgba(34,211,238,0.5)]'
                       : dimmed
-                        ? 'border-slate-800 bg-slate-900/40 text-slate-600'
+                        ? 'border-slate-800 bg-slate-900/40 text-slate-500'
                         : 'border-slate-800 bg-slate-900/60 hover:-translate-y-0.5 hover:border-slate-500 hover:bg-slate-900'
               }`}
             >

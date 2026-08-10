@@ -1,10 +1,22 @@
 import { Router } from 'express'
 import { db } from '../db'
+import { requireAuth } from '../middleware/auth'
 
 const router = Router()
 
+// CSV formula injection prevention: prefix cells starting with =, +, -, @ with a single quote
+// so spreadsheet software treats them as literal strings, not formulas.
+function sanitizeCsvCell(value: string): string {
+  const trimmed = value.trim()
+  if (/^[=+\-@]/.test(trimmed)) {
+    return "'" + trimmed
+  }
+  return trimmed
+}
+
 /**
  * POST /api/import — bulk-import questions.
+ * Auth-gated: only signed-in users may write to the shared question bank.
  * Body: { questions: ImportQuestion[] }  (JSON), or
  *       { csv: "<text>", topicSlug: "..." }  (CSV, first row = headers).
  *
@@ -14,7 +26,7 @@ const router = Router()
  * CSV columns (header row): topicSlug, prompt, type, options (JSON array), correct (JSON array),
  *   explanation, difficulty, isTricky
  */
-router.post('/', (req, res) => {
+router.post('/', requireAuth, (req, res) => {
   const body = (req.body ?? {}) as Record<string, unknown>
 
   let items: unknown[]
@@ -24,6 +36,10 @@ router.post('/', (req, res) => {
     items = parseCsv(body.csv as string, body.topicSlug as string)
   } else {
     return res.status(400).json({ error: 'Provide { questions: [...] } or { csv, topicSlug }' })
+  }
+
+  if (items.length > 1000) {
+    return res.status(400).json({ error: 'Too many items — max 1000 per import' })
   }
 
   const insert = db.prepare(
@@ -67,13 +83,28 @@ router.post('/', (req, res) => {
         topicCache.set(slug, topicId)
       }
 
-      const options = Array.isArray(q.options) ? (q.options as string[]) : []
-      const correct = Array.isArray(q.correct) ? (q.correct as number[]).map(Number) : [0]
+      const options = (Array.isArray(q.options) ? (q.options as string[]) : [])
+        .map((o) => String(o).slice(0, 500))
+        .slice(0, 8)
+      if (!options.length) {
+        skipped.push(`no options for "${q.prompt.slice(0, 40)}"`)
+        continue
+      }
+      const correct = Array.isArray(q.correct)
+        ? [...new Set((q.correct as number[]).map(Number))]
+            .filter((i) => Number.isInteger(i) && i >= 0 && i < options.length)
+        : []
+      if (!correct.length) {
+        skipped.push(`invalid correct indices for "${q.prompt.slice(0, 40)}"`)
+        continue
+      }
       const type = ['mcq', 'multi', 'scenario'].includes(String(q.type)) ? String(q.type) : 'mcq'
       const difficulty = Number(q.difficulty) >= 1 && Number(q.difficulty) <= 3 ? Number(q.difficulty) : 1
       const isTricky = q.isTricky === true || q.isTricky === 'true' || q.isTricky === 1 ? 1 : 0
+      const prompt = String(q.prompt).slice(0, 500)
+      const explanation = String(q.explanation ?? '').slice(0, 2000)
 
-      insert.run(topicId, q.prompt, type, JSON.stringify(options), JSON.stringify(correct), q.explanation ?? '', difficulty, isTricky)
+      insert.run(topicId, prompt, type, JSON.stringify(options), JSON.stringify(correct), explanation, difficulty, isTricky)
       inserted.push({ slug, prompt: q.prompt })
     }
   })
@@ -95,7 +126,7 @@ function parseCsv(text: string, defaultTopicSlug: string): unknown[] {
 
   return lines.slice(1).map((line) => {
     // naive CSV split (handles quoted fields)
-    const fields = splitCsvLine(line)
+    const fields = splitCsvLine(line).map(sanitizeCsvCell)
     const get = (name: string) => {
       const i = idx(name)
       return i >= 0 ? fields[i] : undefined

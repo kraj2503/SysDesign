@@ -22,7 +22,7 @@ export default function Lb4Vs7() {
         <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => setLayer('L4')}
-            className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+            className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors ${
               !isL7 ? 'bg-cyan-500/20 text-cyan-300 ring-1 ring-cyan-500/50' : 'bg-slate-800 text-slate-400'
             }`}
           >
@@ -30,7 +30,7 @@ export default function Lb4Vs7() {
           </button>
           <button
             onClick={() => setLayer('L7')}
-            className={`rounded-lg px-3 py-2 text-sm font-semibold transition ${
+            className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors ${
               isL7 ? 'bg-cyan-500/20 text-cyan-300 ring-1 ring-cyan-500/50' : 'bg-slate-800 text-slate-400'
             }`}
           >
@@ -61,7 +61,7 @@ export default function Lb4Vs7() {
       </div>
 
       <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-        <div className="text-xs font-semibold uppercase tracking-wide text-slate-500">Capabilities</div>
+        <div className="text-xs font-semibold uppercase tracking-wide text-slate-400">Capabilities</div>
         <ul className="mt-2 space-y-1.5">
           {rows.map((r) => {
             const available = isL7 ? r.l7 : r.l4
@@ -69,12 +69,12 @@ export default function Lb4Vs7() {
               <li key={r.label} className="flex items-center gap-2 text-sm">
                 <span
                   className={`flex h-4 w-4 items-center justify-center rounded border text-[10px] ${
-                    available ? 'border-emerald-500/50 text-emerald-400' : 'border-slate-700 text-slate-700'
+                    available ? 'border-emerald-500/50 text-emerald-400' : 'border-slate-700 text-slate-500'
                   }`}
                 >
                   {available ? '✓' : '—'}
                 </span>
-                <span className={available ? 'text-slate-300' : 'text-slate-600'}>{r.label}</span>
+                <span className={available ? 'text-slate-300' : 'text-slate-500'}>{r.label}</span>
               </li>
             )
           })}

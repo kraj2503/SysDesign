@@ -37,7 +37,9 @@ export default function Import() {
     try {
       let body: { questions?: unknown[]; csv?: string; topicSlug?: string }
       if (mode === 'json') {
-        const parsed = JSON.parse(text)
+        // The sample is annotated with // comments so people can read it — strip line-start
+        // comments before parsing (URLs inside string values are safe: they aren't at line start).
+        const parsed = JSON.parse(text.replace(/^\s*\/\/.*$/gm, ''))
         if (Array.isArray(parsed)) body = { questions: parsed }
         else if (parsed && Array.isArray(parsed.questions)) body = { questions: parsed.questions }
         else throw new Error('JSON must be an array of questions or { "questions": [...] }')

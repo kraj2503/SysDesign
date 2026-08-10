@@ -27,8 +27,16 @@ hashing, L4 vs L7), randomized "tricky" quizzes, and step-by-step guided case-st
   re-run `npm run seed`. There is no CMS or admin editing path for seeded content.
 - **API routes** live in `server/src/routes/`. The client fetches through the typed wrapper
   `client/src/api/client.ts`; Vite proxies `/api` → :4000 (see `client/vite.config.ts`).
+- **Auth (Phase 11):** JWT in an HttpOnly cookie (`token`). Helpers in `server/src/middleware/auth.ts`
+  (`requireAuth` / `optionalAuth` attach `req.userId`); routes in `server/src/routes/auth.ts`
+  (email/password + Google OAuth). All `/api/topics`, `/api/quiz`, `/api/progress` routes are
+  auth-gated and scoped per user. Env: `SESSION_SECRET`, `GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI`
+  (see `.env.example`; `server/src/env.ts` loads a root `.env`).
 - **DB schema** is defined in `server/src/db.ts`; shared data shapes are in `server/src/types.ts`
-  (server) and `client/src/types.ts` (client).
+  (server) and `client/src/types.ts` (client). Progress is keyed `PRIMARY KEY(user_id, topic_id)`;
+  `quiz_results` stores a full per-question snapshot in `answers_json`.
+- **Unlock cascade:** first topic starts `unlocked`; `POST /api/quiz/results` atomically records the
+  result, updates best/attempts, and (≥ 60%) marks the topic completed + unlocks the next in order.
 - **Case-study simulator:** `client/src/components/simulator/SimulatorShell.tsx` drives a 5-step
   session from each case study's `steps_json`.
 
@@ -47,6 +55,10 @@ hashing, L4 vs L7), randomized "tricky" quizzes, and step-by-step guided case-st
 - **Reusable UI helpers:** `client/src/components/ProgressRing.tsx` (SVG ring with gradient stroke)
   and `client/src/lib/ui.ts` (`tileGradient(i)`, `barGradient(i)`, `ringGradient(i)` — literal
   Tailwind class strings that survive purging). Reuse them rather than inventing new palettes.
+- **Auth UI:** `client/src/context/AuthContext.tsx` (user/loading/login/register/logout) wraps the app;
+  `client/src/pages/Auth.tsx` is the standalone `/auth` screen. Data routes are guarded by `RequireAuth`
+  in `client/src/App.tsx`. Quiz-history pages `Results.tsx` / `ResultsDetail.tsx` render attempts with the
+  same `.card`/`.chip`/`ProgressRing` system.
 - Keep UI copy punchy; avoid long descriptive walls of text in the chrome (headers, subtitles, labels).
 
 ## Content Authoring Rules

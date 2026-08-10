@@ -22,7 +22,8 @@ export default function Lesson() {
   }, [slug])
 
   const progress = progressBySlug[slug]
-  const locked = progress?.status === 'locked' || (progress === undefined && false)
+  // Fail closed: no progress row yet (still loading) or explicitly locked → treat as locked.
+  const locked = progress === undefined || progress.status === 'locked'
 
   if (error) return <p className="text-sm text-rose-400">{error}</p>
   if (!topic)

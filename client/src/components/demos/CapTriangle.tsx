@@ -87,7 +87,10 @@ export default function CapTriangle() {
     <div className="grid gap-4 sm:grid-cols-2">
       <svg
         viewBox="0 0 400 360"
-        className="w-full cursor-grab touch-none select-none rounded-xl border border-slate-800 bg-slate-950"
+        tabIndex={0}
+        role="slider"
+        aria-label="CAP triangle — drag the point, or focus and use arrow keys to move it"
+        className="w-full cursor-grab touch-none select-none rounded-xl border border-slate-800 bg-slate-950 focus:outline-none focus-visible:ring-2 focus-visible:ring-cyan-400/70"
         onPointerDown={(e) => {
           dragging.current = true
           e.currentTarget.setPointerCapture(e.pointerId)
@@ -95,6 +98,19 @@ export default function CapTriangle() {
         }}
         onPointerMove={handlePointer}
         onPointerUp={() => (dragging.current = false)}
+        onKeyDown={(e) => {
+          const step = e.shiftKey ? 24 : 8
+          const moves: Record<string, [number, number]> = {
+            ArrowLeft: [-step, 0],
+            ArrowRight: [step, 0],
+            ArrowUp: [0, -step],
+            ArrowDown: [0, step],
+          }
+          const m = moves[e.key]
+          if (!m) return
+          e.preventDefault()
+          setPos(clampToTriangle(pos.x + m[0], pos.y + m[1]))
+        }}
       >
         {/* triangle */}
         <polygon
@@ -114,7 +130,7 @@ export default function CapTriangle() {
           P
         </text>
         <text x={200} y={356} textAnchor="middle" fill="#64748b" fontSize="11">
-          drag the dot — CAP is about picking two under partition
+          drag the dot, or focus and use arrow keys — CAP is about picking two under partition
         </text>
         {/* draggable dot */}
         <circle cx={pos.x} cy={pos.y} r="10" fill={info.accent} stroke="#0f172a" strokeWidth="2" />

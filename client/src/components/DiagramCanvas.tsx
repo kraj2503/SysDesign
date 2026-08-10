@@ -19,7 +19,7 @@ const KIND_STYLE: Record<string, { bg: string; border: string }> = {
   server: { bg: '#1e40af', border: '#60a5fa' },
   cache: { bg: '#9f1239', border: '#fb7185' },
   queue: { bg: '#166534', border: '#4ade80' },
-  db: { bg: '#3b0764', border: '#a78bfa' },
+  db: { bg: '#312e81', border: '#818cf8' },
   other: { bg: '#334155', border: '#94a3b8' },
 }
 
@@ -30,7 +30,7 @@ const LEGEND: Record<string, string> = {
   server: '#60a5fa',
   cache: '#fb7185',
   queue: '#4ade80',
-  db: '#a78bfa',
+  db: '#818cf8',
   other: '#94a3b8',
 }
 
@@ -87,8 +87,14 @@ export default function DiagramCanvas({ diagram }: { diagram: Diagram }) {
       <div className="h-80 w-full">
         <ReactFlow nodes={nodes} edges={edges} fitView proOptions={{ hideAttribution: true }}>
           <Background color="#1e293b" gap={20} />
-          <Controls showInteractive={false} />
-          <MiniMap pannable zoomable nodeColor="#1e3a5f" maskColor="rgba(2,6,23,0.6)" />
+          <Controls showInteractive={false} className="!bottom-16 sm:!bottom-4" />
+          <MiniMap
+            pannable
+            zoomable
+            nodeColor="#1e3a5f"
+            maskColor="rgba(2,6,23,0.6)"
+            className="!hidden sm:!block"
+          />
         </ReactFlow>
       </div>
     </div>

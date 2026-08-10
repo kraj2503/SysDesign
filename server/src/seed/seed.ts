@@ -8,6 +8,7 @@ function reset() {
   db.exec(`
     DROP TABLE IF EXISTS quiz_results;
     DROP TABLE IF EXISTS progress;
+    DROP TABLE IF EXISTS users;
     DROP TABLE IF EXISTS case_studies;
     DROP TABLE IF EXISTS questions;
     DROP TABLE IF EXISTS lessons;

@@ -9,7 +9,6 @@ interface ProgressContextValue {
   loading: boolean
   error: string | null
   refresh: () => Promise<void>
-  markCompleted: (slug: string) => Promise<void>
   progressBySlug: Record<string, TopicProgress>
 }
 
@@ -38,23 +37,19 @@ export function ProgressProvider({ children }: { children: ReactNode }) {
     void refresh()
   }, [refresh])
 
-  const markCompleted = useCallback(
-    async (slug: string) => {
-      await api.setProgress(slug, { status: 'completed' })
-      await refresh()
-    },
-    [refresh],
-  )
-
+  // GET /api/topics embeds an authoritative, complete `progress` per topic (first topic
+  // unlocked, rest locked by default) — prefer it over the sparse /api/progress rows so
+  // untouched topics aren't mistaken for unlocked. The flat list fills any gaps.
   const progressBySlug = useMemo(() => {
     const map: Record<string, TopicProgress> = {}
-    for (const p of progress) map[p.topic_slug] = p
+    for (const t of topics) if (t.progress) map[t.slug] = t.progress
+    for (const p of progress) if (!map[p.topic_slug]) map[p.topic_slug] = p
     return map
-  }, [progress])
+  }, [topics, progress])
 
   const value = useMemo(
-    () => ({ topics, progress, loading, error, refresh, markCompleted, progressBySlug }),
-    [topics, progress, loading, error, refresh, markCompleted, progressBySlug],
+    () => ({ topics, progress, loading, error, refresh, progressBySlug }),
+    [topics, progress, loading, error, refresh, progressBySlug],
   )
 
   return <ProgressContext.Provider value={value}>{children}</ProgressContext.Provider>
