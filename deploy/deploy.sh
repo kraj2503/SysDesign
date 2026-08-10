@@ -47,11 +47,16 @@ echo "==> node $(node -v) · npm $(npm -v)"
 
 # --- 3. dedicated app user + ownership --------------------------------------
 id -u "$APP_USER" &>/dev/null || useradd --system --home-dir "$APP_DIR" --shell /usr/sbin/nologin "$APP_USER"
-chown -R "$APP_USER:$APP_USER" "$APP_DIR"
-# Guarantee the SQLite data dir exists before the service starts (systemd
-# namespace hardening fails with ENOENT if this path is missing).
+# Scope ownership to the runtime-writable dirs only (all gitignored). Do NOT
+# chown the whole repo: it's pulled with git as the operator user (e.g. ubuntu),
+# and chowning .git/tracked files would break `git pull`.
+#   node_modules + client/dist are written by npm as the app user during
+#   install/build; server/data holds the SQLite DB. Everything else stays
+#   operator-owned so `git pull` keeps working.
+chown -R "$APP_USER:$APP_USER" "$APP_DIR/node_modules" 2>/dev/null || true
+chown -R "$APP_USER:$APP_USER" "$APP_DIR/client/dist" 2>/dev/null || true
 mkdir -p "$SERVER_DIR/data"
-chown "$APP_USER:$APP_USER" "$SERVER_DIR/data"
+chown -R "$APP_USER:$APP_USER" "$SERVER_DIR/data"
 
 # --- 4. install + build as the app user --------------------------------------
 cd "$APP_DIR"
