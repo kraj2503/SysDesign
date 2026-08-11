@@ -5,11 +5,10 @@
 #   cd /opt/sysdesignlab && sudo bash deploy/deploy.sh
 #
 # What it does:
-#   1. installs system packages (nginx, build tools, python3 for native modules)
+#   1. installs system packages (nginx, g++-10 for C++20, python3)
 #   2. installs Node.js 22 via NodeSource if missing or older than 20.12
 #   3. npm install; forces a fresh build every time
 #   4. writes a root .env with NODE_ENV=production, PORT=4000, a fresh SESSION_SECRET
-#      (keeps the existing file on re-runs so your secret + Google keys survive)
 #   5. seeds the SQLite DB only if it doesn't exist yet (never wipes user data)
 #   6. installs a systemd unit and nginx site, starts everything
 set -euo pipefail
@@ -31,7 +30,8 @@ echo "    app dir:  $APP_DIR"
 # --- 1. system packages -----------------------------------------------------
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-apt-get install -y ca-certificates curl git nginx build-essential python3 pkg-config
+# Added g++-10 because better-sqlite3 requires C++20 support (missing in default g++-9 on Ubuntu 20.04)
+apt-get install -y ca-certificates curl git nginx build-essential python3 pkg-config g++-10
 
 # --- 2. Node.js (>= 20.12 for process.loadEnvFile; 22 preferred) -------------
 node_ok() {
@@ -57,18 +57,19 @@ cd "$APP_DIR"
 
 echo "==> Clearing old build artifacts for a fresh build..."
 # We must remove the old build directories and recreate them with the correct 
-# ownership, otherwise the restricted APP_USER will get a "Permission denied" 
-# error when trying to write the new build output.
-rm -rf "$APP_DIR/node_modules" "$APP_DIR/client/dist" "$APP_DIR/dist"
-mkdir -p "$APP_DIR/node_modules" "$APP_DIR/client/dist" "$APP_DIR/dist"
+# ownership. We also create an isolated .npm-cache so the restricted user doesn't 
+# try to write to the ubuntu user's directory.
+rm -rf "$APP_DIR/node_modules" "$APP_DIR/client/dist" "$APP_DIR/dist" "$APP_DIR/.npm-cache"
+mkdir -p "$APP_DIR/node_modules" "$APP_DIR/client/dist" "$APP_DIR/dist" "$APP_DIR/.npm-cache"
 
-# Scope ownership to the runtime-writable/build dirs only. Do NOT chown the 
-# whole repo so `git pull` keeps working for the operator user.
-chown -R "$APP_USER:$APP_USER" "$APP_DIR/node_modules" "$APP_DIR/client/dist" "$APP_DIR/dist"
+# Scope ownership to the runtime-writable/build dirs only.
+chown -R "$APP_USER:$APP_USER" "$APP_DIR/node_modules" "$APP_DIR/client/dist" "$APP_DIR/dist" "$APP_DIR/.npm-cache"
 
 echo "==> Installing dependencies and building..."
-sudo -u "$APP_USER" npm install --no-audit --no-fund
-sudo -u "$APP_USER" npm run build
+# We pass CXX=g++-10 so node-gyp compiles better-sqlite3 successfully.
+# We pass npm_config_cache so npm has a writable place to store cache.
+sudo -u "$APP_USER" env CXX=g++-10 npm_config_cache="$APP_DIR/.npm-cache" npm install --no-audit --no-fund
+sudo -u "$APP_USER" env npm_config_cache="$APP_DIR/.npm-cache" npm run build
 
 # --- 5. .env (idempotent) -----------------------------------------------------
 umask 077
@@ -86,9 +87,6 @@ if [ ! -f "$ENV_FILE" ]; then
   echo "==> Wrote $ENV_FILE with a fresh SESSION_SECRET."
 else
   echo "==> Keeping existing $ENV_FILE."
-  # A half-configured .env (e.g. `cp .env.production .env`) has an EMPTY
-  # SESSION_SECRET=, and the app refuses to start without one. Fill it in
-  # rather than bricking the deploy with a startup crash.
   if ! grep -qE '^SESSION_SECRET=.+' "$ENV_FILE"; then
     NEW_SECRET="$(openssl rand -hex 32)"
     if grep -q '^SESSION_SECRET=' "$ENV_FILE"; then
@@ -105,7 +103,7 @@ chmod 600 "$ENV_FILE"
 # --- 6. seed only on first deploy ---------------------------------------------
 if [ ! -f "$SERVER_DIR/data/sysdesign.db" ]; then
   echo "==> No DB yet — seeding."
-  sudo -u "$APP_USER" npm run seed
+  sudo -u "$APP_USER" env npm_config_cache="$APP_DIR/.npm-cache" npm run seed
 else
   echo "==> DB exists — skipping seed (user data preserved)."
 fi
@@ -122,9 +120,6 @@ else
 fi
 
 # --- 8. nginx ------------------------------------------------------------------
-# Preserve an HTTPS config that certbot set up (it edits this file to add 443 +
-# cert paths). Only (re)install our plain-HTTP config while no TLS config exists,
-# otherwise the next re-deploy would wipe certbot's work and kill HTTPS.
 if [ -f "/etc/nginx/sites-available/$SERVICE_NAME" ] && grep -q "ssl_certificate" "/etc/nginx/sites-available/$SERVICE_NAME"; then
   echo "==> nginx config already has TLS (certbot) — leaving it untouched."
 else
