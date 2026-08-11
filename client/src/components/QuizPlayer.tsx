@@ -17,6 +17,8 @@ interface QuizPlayerProps {
 interface AnswerRecord {
   question: Question
   selected: number[]
+  correct: number[] // verified server-side via /quiz/check
+  explanation: string
 }
 
 const DIFFICULTY_COLORS: Record<number, string> = {
@@ -34,11 +36,16 @@ export default function QuizPlayer({
 }: QuizPlayerProps) {
   const { refresh } = useProgress()
   const [questions, setQuestions] = useState<Question[] | null>(null)
+  const [token, setToken] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const [index, setIndex] = useState(0)
   const [selected, setSelected] = useState<number[]>([])
   const [revealed, setRevealed] = useState(false)
+  // Server-verified result for the currently revealed question (via /quiz/check).
+  const [check, setCheck] = useState<{ correct: number[]; explanation: string } | null>(null)
+  const [checking, setChecking] = useState(false)
+  const [checkError, setCheckError] = useState<string | null>(null)
   const [answers, setAnswers] = useState<AnswerRecord[]>([])
   const [finished, setFinished] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -49,11 +56,15 @@ export default function QuizPlayer({
   const [retakeNonce, setRetakeNonce] = useState(0)
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const checkingRef = useRef(false)
 
   useEffect(() => {
     api
       .getQuiz(topicSlug, count)
-      .then(setQuestions)
+      .then((session) => {
+        setQuestions(session.questions)
+        setToken(session.token)
+      })
       .catch((e) => setError(e instanceof Error ? e.message : 'Failed to load quiz'))
   }, [topicSlug, count, retakeNonce])
 
@@ -81,7 +92,7 @@ export default function QuizPlayer({
   // auto-submit when the timer runs out
   useEffect(() => {
     if (secondsLeft === 0 && current && !revealed && !submitted && timePerQuestionSec > 0) {
-      handleCheck()
+      void handleCheck()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [secondsLeft])
@@ -95,16 +106,36 @@ export default function QuizPlayer({
     }
   }, [current])
 
-  const handleCheck = useCallback(() => {
-    if (!current) return
-    if (timerRef.current) clearInterval(timerRef.current)
-    setAnswers((prev) => [...prev, { question: current, selected }])
-    setRevealed(true)
-  }, [current, selected])
+  const handleCheck = useCallback(async () => {
+    if (!current || !token || checkingRef.current) return
+    checkingRef.current = true
+    setChecking(true)
+    setCheckError(null)
+    try {
+      // The server verifies the selection against the DB and only then reveals the
+      // correct indices + explanation (the quiz endpoint deliberately omits them).
+      const res = await api.checkQuizAnswer(token, current.id, selected)
+      if (timerRef.current) clearInterval(timerRef.current)
+      setCheck({ correct: res.correctIndices, explanation: res.explanation })
+      setAnswers((prev) => [
+        ...prev,
+        { question: current, selected, correct: res.correctIndices, explanation: res.explanation },
+      ])
+      setRevealed(true)
+    } catch (e) {
+      // Don't reveal — leave the selection in place so the user can retry.
+      setCheckError(e instanceof Error ? e.message : 'Failed to check answer — try again.')
+    } finally {
+      checkingRef.current = false
+      setChecking(false)
+    }
+  }, [current, selected, token])
 
   const handleNext = useCallback(() => {
     setSelected([])
     setRevealed(false)
+    setCheck(null)
+    setCheckError(null)
     if (index + 1 >= (questions?.length ?? 0)) {
       setFinished(true)
     } else {
@@ -113,30 +144,21 @@ export default function QuizPlayer({
   }, [index, questions?.length])
 
   const score = useMemo(
-    () => answers.filter((a) => a.question.correct.every((c) => a.selected.includes(c)) && a.selected.length === a.question.correct.length).length,
+    () => answers.filter((a) => a.correct.every((c) => a.selected.includes(c)) && a.selected.length === a.correct.length).length,
     [answers],
   )
   const percent = questions?.length ? Math.round((score / questions.length) * 100) : 0
 
   const handleSubmit = useCallback(async () => {
-    if (submitted || saving) return
+    if (submitted || saving || !token) return
     setSaving(true)
     setSubmitError(null)
     try {
+      // The server grades from the DB and records the full snapshot itself; the client
+      // only sends the token (binds the subset) + which options the user picked.
       const res = await api.submitQuizResult({
-        topic_slug: topicSlug,
-        score,
-        total: questions?.length ?? 0,
-        answers: answers.map((a) => ({
-          question_id: a.question.id,
-          prompt: a.question.prompt,
-          type: a.question.type,
-          options: a.question.options,
-          correct: a.question.correct,
-          selected: a.selected,
-          explanation: a.question.explanation,
-          is_tricky: a.question.is_tricky,
-        })),
+        token,
+        answers: answers.map((a) => ({ question_id: a.question.id, selected: a.selected })),
       })
       setResultId(res.result_id)
       // The server marks the topic completed + unlocks the next one — refresh to reflect it.
@@ -148,19 +170,22 @@ export default function QuizPlayer({
     } finally {
       setSaving(false)
     }
-  }, [submitted, saving, topicSlug, score, questions?.length, answers, refresh])
+  }, [submitted, saving, token, answers, refresh])
 
   // In-app retake: reset every piece of local state and re-fetch a fresh random quiz.
   const handleRetake = useCallback(() => {
     setIndex(0)
     setSelected([])
     setRevealed(false)
+    setCheck(null)
+    setCheckError(null)
     setAnswers([])
     setFinished(false)
     setSubmitted(false)
     setSubmitError(null)
     setResultId(null)
     setQuestions(null)
+    setToken(null)
     setRetakeNonce((n) => n + 1)
   }, [])
 
@@ -248,8 +273,8 @@ export default function QuizPlayer({
         <div className="space-y-3">
           {answers.map((a, i) => {
             const ok =
-              a.question.correct.every((c) => a.selected.includes(c)) &&
-              a.selected.length === a.question.correct.length
+              a.correct.every((c) => a.selected.includes(c)) &&
+              a.selected.length === a.correct.length
             return (
               <div key={i} className="card card-hover p-4">
                 <div className="flex items-start gap-3">
@@ -276,7 +301,7 @@ export default function QuizPlayer({
                       <p className="text-slate-400">
                         <span className="text-slate-500">Correct:</span>{' '}
                         <span className="text-emerald-300">
-                          {a.question.correct.map((c) => a.question.options[c]).join(', ')}
+                          {a.correct.map((c) => a.question.options[c]).join(', ')}
                         </span>
                       </p>
                     </div>
@@ -299,8 +324,9 @@ export default function QuizPlayer({
 
   const isCorrect =
     revealed &&
-    current.correct.every((c) => selected.includes(c)) &&
-    selected.length === current.correct.length
+    check != null &&
+    check.correct.every((c) => selected.includes(c)) &&
+    selected.length === check.correct.length
 
   return (
     <div className="reveal space-y-5">
@@ -364,9 +390,9 @@ export default function QuizPlayer({
       <div className="space-y-2.5">
         {current.options.map((opt, i) => {
           const isSelected = selected.includes(i)
-          const showCorrect = revealed && current.correct.includes(i)
-          const showWrong = revealed && isSelected && !current.correct.includes(i)
-          const dimmed = revealed && !current.correct.includes(i) && !isSelected
+          const showCorrect = revealed && (check?.correct.includes(i) ?? false)
+          const showWrong = revealed && isSelected && !(check?.correct.includes(i) ?? false)
+          const dimmed = revealed && !(check?.correct.includes(i) ?? false) && !isSelected
           return (
             <button
               key={i}
@@ -422,15 +448,27 @@ export default function QuizPlayer({
             )}
             {isCorrect ? 'Correct! Nice one.' : 'Not quite — here\'s the gotcha.'}
           </div>
-          <p className="mt-2 leading-relaxed text-slate-300">{current.explanation}</p>
+          <p className="mt-2 leading-relaxed text-slate-300">{check?.explanation ?? ''}</p>
         </div>
+      )}
+
+      {/* check error (keeps the answer on screen for retry) */}
+      {checkError && (
+        <p className="text-sm font-medium text-rose-400" role="alert">
+          {checkError}
+        </p>
       )}
 
       {/* actions */}
       <div className="flex justify-end">
         {!revealed ? (
-          <button onClick={handleCheck} disabled={selected.length === 0} className="btn-primary">
-            <CheckCircle2 className="h-4 w-4" /> Check answer
+          <button
+            onClick={() => void handleCheck()}
+            disabled={selected.length === 0 || checking || !token}
+            className="btn-primary"
+          >
+            {checking ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4" />}
+            {checking ? 'Checking…' : 'Check answer'}
           </button>
         ) : (
           <button onClick={handleNext} className="btn-ghost">

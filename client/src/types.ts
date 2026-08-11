@@ -48,8 +48,10 @@ export interface Question {
   prompt: string
   type: QuestionType
   options: string[]
-  correct: number[]
-  explanation: string
+  // Omitted by GET /topics/:slug/quiz — the server only reveals the correct indices +
+  // explanation via POST /quiz/check after the user answers.
+  correct?: number[]
+  explanation?: string
   difficulty: 1 | 2 | 3
   is_tricky: boolean
 }

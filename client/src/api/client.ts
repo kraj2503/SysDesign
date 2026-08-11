@@ -62,6 +62,20 @@ export interface QuizResultDetail extends QuizResultSummary {
   questions: QuizAnswerSnapshot[]
 }
 
+// GET /topics/:slug/quiz returns the random subset PLUS a short-lived signed token that
+// binds it to the user + topic. The token is required for /quiz/check and /quiz/results,
+// so the client must carry it through the whole attempt.
+export interface QuizSession {
+  questions: Question[]
+  token: string | null
+}
+
+export interface QuizCheckResult {
+  correct: boolean
+  correctIndices: number[]
+  explanation: string
+}
+
 export const api = {
   health: () => request<HealthResponse>('/health'),
 
@@ -80,12 +94,15 @@ export const api = {
     request<Lesson>(`/topics/${topicSlug}/lessons/${lessonSlug}`),
 
   getQuiz: (topicSlug: string, count = 8) =>
-    request<Question[]>(`/topics/${topicSlug}/quiz?count=${count}`),
+    request<QuizSession>(`/topics/${topicSlug}/quiz?count=${count}`),
+  checkQuizAnswer: (token: string, questionId: number, selected: number[]) =>
+    request<QuizCheckResult>('/quiz/check', {
+      method: 'POST',
+      body: JSON.stringify({ token, question_id: questionId, selected }),
+    }),
   submitQuizResult: (result: {
-    topic_slug: string
-    score: number
-    total: number
-    answers: QuizAnswerSnapshot[]
+    token: string
+    answers: { question_id: number; selected: number[] }[]
   }) =>
     request<{ ok: boolean; percent: number; result_id: number }>('/quiz/results', {
       method: 'POST',
