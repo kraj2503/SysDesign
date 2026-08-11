@@ -38,7 +38,7 @@ export default function Dashboard() {
 
         <div className="relative max-w-2xl">
           <span className="chip mb-5 border-cyan-500/30 bg-cyan-500/10 text-cyan-300">
-            <Sparkles className="h-3.5 w-3.5" /> Interactive · scenario-driven · tricky-question packed
+            <Sparkles className="h-3.5 w-3.5" />  scenario-driven · tricky-question packed
           </span>
           <h1 className="font-display text-4xl font-bold leading-[1.08] tracking-tight text-white sm:text-5xl">
             Master <span className="grad-text">high-level system design</span> by doing, not reading.
