@@ -99,7 +99,7 @@ if [ -d "$CLIENT_DIST" ]; then
   ls -la "$CLIENT_DIST" | head -10
 else
   echo "✗ Client build NOT found at $CLIENT_DIST"
-  echo "Run: cd $APP_DIR && sudo -u sysdesignlab npm run build"
+  echo "Build it on your Mac (npm run build), then re-deploy: bash deploy/push.sh <PUBLIC_IP>"
 fi
 echo
 
@@ -120,6 +120,6 @@ echo
 echo "Next steps based on common issues:"
 echo "  - If manual test (step 5) shows error → fix that error"
 echo "  - If DB missing → run: cd $APP_DIR && sudo -u sysdesignlab npm run seed"
-echo "  - If client build missing → run: cd $APP_DIR && sudo -u sysdesignlab npm run build"
+echo "  - If client build missing → build on your Mac (npm run build), then re-run: bash deploy/push.sh <PUBLIC_IP>"
 echo "  - If .env missing SESSION_SECRET → generate: openssl rand -hex 32"
 echo "  - If port 4000 not listening after manual test works → check systemd unit"

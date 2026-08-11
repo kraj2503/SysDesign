@@ -6,20 +6,28 @@
 - [ ] **Type checks pass**: `cd server && npx tsc --noEmit` (no errors)
 - [ ] **Seed works**: `npm run seed` (recreates DB with 13 topics, 169 questions, 12 case studies)
 - [ ] **Dev server runs**: `npm run dev` → API :4000 + client :5173 both respond 200
+- [ ] **Deploy**: `bash deploy/push.sh <PUBLIC_IP>` (builds locally, syncs incl. `client/dist`, deploys)
 
 ## 📋 On the Oracle VM (after SSH)
 
 ### 1. Copy code to VM
+The client is **built on your Mac** — build it first, then sync the repo including the
+prebuilt `client/dist` (the VM no longer compiles it):
+
 ```bash
 # From your Mac (repo root):
+npm run build        # required — produces client/dist to ship
+
 ssh -i ~/.ssh/sysdesignlab ubuntu@<PUBLIC_IP> "sudo mkdir -p /opt/sysdesignlab && sudo chown ubuntu /opt/sysdesignlab"
 
 rsync -avz --delete \
-  --exclude node_modules --exclude .git --exclude client/dist \
+  --exclude node_modules --exclude .git \
   --exclude server/data --exclude .env \
   -e "ssh -i ~/.ssh/sysdesignlab" \
   ./ ubuntu@<PUBLIC_IP>:/opt/sysdesignlab/
 ```
+
+> Or skip all of this and use the one-command `bash deploy/push.sh <PUBLIC_IP>`.
 
 ### 2. Create production .env
 ```bash
@@ -78,7 +86,7 @@ sudo systemctl restart sysdesignlab
 |------|---------|
 | View live logs | `journalctl -u sysdesignlab -f` |
 | Restart app | `sudo systemctl restart sysdesignlab` |
-| Re-deploy after code push | Re-run rsync, then `sudo bash deploy/deploy.sh` |
+| Re-deploy after code push | `bash deploy/push.sh <PUBLIC_IP>` (builds locally, syncs incl. dist, deploys) |
 | Backup user data | `sudo tar czf /opt/sysdesignlab/backup-$(date +%F).tar.gz -C /opt/sysdesignlab server/data` |
 | Check service status | `systemctl status sysdesignlab nginx` |
 
@@ -106,6 +114,7 @@ sudo systemctl restart sysdesignlab
 |---------|-----|
 | "SESSION_SECRET must be set" | Check `.env` exists and has `SESSION_SECRET=...` |
 | 502 Bad Gateway | `journalctl -u sysdesignlab -f` — check if API is running on :4000 |
+| Site loads blank / 404s | No `client/dist` shipped — build locally (`npm run build`) and re-deploy with `bash deploy/push.sh <PUBLIC_IP>` |
 | OAuth redirects to HTTP | Ensure nginx sends `X-Forwarded-Proto: https` (certbot does this) |
 | "Google sign-in failed" | Verify `GOOGLE_REDIRECT_URI` matches Google Console exactly |
 | DB locked / migrations fail | Stop service: `systemctl stop sysdesignlab`, check no other process holds DB |

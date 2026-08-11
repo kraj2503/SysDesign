@@ -7,7 +7,7 @@
 # What it does:
 #   1. installs system packages (nginx, build tools, python3 for native modules)
 #   2. installs Node.js 22 via NodeSource if missing or older than 20.12
-#   3. npm install + builds the client
+#   3. npm install; uses prebuilt client/dist (built on the Mac), builds only as a fallback
 #   4. writes a root .env with NODE_ENV=production, PORT=4000, a fresh SESSION_SECRET
 #      (keeps the existing file on re-runs so your secret + Google keys survive)
 #   5. seeds the SQLite DB only if it doesn't exist yet (never wipes user data)
@@ -50,18 +50,32 @@ id -u "$APP_USER" &>/dev/null || useradd --system --home-dir "$APP_DIR" --shell 
 # Scope ownership to the runtime-writable dirs only (all gitignored). Do NOT
 # chown the whole repo: it's pulled with git as the operator user (e.g. ubuntu),
 # and chowning .git/tracked files would break `git pull`.
-#   node_modules + client/dist are written by npm as the app user during
-#   install/build; server/data holds the SQLite DB. Everything else stays
-#   operator-owned so `git pull` keeps working.
+#   node_modules is written by npm as the app user during install; server/data
+#   holds the SQLite DB. client/dist is built on the Mac and shipped prebuilt, so
+#   it stays operator-owned (read access for the app user is enough) — the build
+#   block below normalizes ownership after any fallback build. Everything else
+#   stays operator-owned so `git pull` keeps working.
 chown -R "$APP_USER:$APP_USER" "$APP_DIR/node_modules" 2>/dev/null || true
-chown -R "$APP_USER:$APP_USER" "$APP_DIR/client/dist" 2>/dev/null || true
 mkdir -p "$SERVER_DIR/data"
 chown -R "$APP_USER:$APP_USER" "$SERVER_DIR/data"
 
-# --- 4. install + build as the app user --------------------------------------
+# --- 4. install deps + ensure a client build exists ----------------------------
+# The client is built on the Mac and shipped as client/dist via rsync
+# (deploy/push.sh). If it's absent (fresh VM, or only source was rsync'd), build it
+# here as a fallback. Either way dist is chowned back to the operator so the next
+# `rsync --delete` can unlink stale hashed assets; the app user only needs read
+# access, which the world-readable 644/755 perms already provide.
 cd "$APP_DIR"
 sudo -u "$APP_USER" npm install --no-audit --no-fund
-sudo -u "$APP_USER" npm run build
+DIST_OWNER="$(stat -c '%U' "$APP_DIR")"
+if [ -f "$APP_DIR/client/dist/index.html" ]; then
+  echo "==> Using prebuilt client/dist (built on your Mac)."
+else
+  echo "==> No client/dist found — building on the server (fallback)."
+  chown -R "$APP_USER:$APP_USER" "$APP_DIR/client/dist" 2>/dev/null || true   # let the build write
+  sudo -u "$APP_USER" npm run build
+fi
+chown -R "$DIST_OWNER" "$APP_DIR/client/dist" 2>/dev/null || true
 
 # --- 5. .env (idempotent) -----------------------------------------------------
 umask 077

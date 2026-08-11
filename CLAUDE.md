@@ -19,6 +19,8 @@ hashing, L4 vs L7), randomized "tricky" quizzes, and step-by-step guided case-st
 | `npm run build` | Production build of the client (runs `tsc --noEmit` first) |
 | `npm run dev:server` / `npm run dev:client` | Run one side only |
 | `npm run start` | Run the Express server only (production mode) |
+| `bash deploy/push.sh <PUBLIC_IP>` | Build client locally + deploy to the Oracle VM (ships prebuilt `client/dist`) |
+| `bash deploy/network-setup.sh [--ip <IP>]` | Open every Oracle firewall layer (security list(s) + NSGs + OS firewall via SSH), assign a public IP, verify — fixes "works on localhost but not from the internet" |
 
 ## Architecture
 

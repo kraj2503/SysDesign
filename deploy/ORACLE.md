@@ -33,6 +33,21 @@ part (you, ~15 min) and the deploy script (one command).
    availability domain, or retry later. Persistence wins.
 
 ### A3. Open ports (this is the firewall — nothing else blocks traffic)
+
+**Recommended — one command.** `deploy/network-setup.sh` opens every layer that
+blocks the VM from the public internet: the security list(s), any Network
+Security Groups on the VNIC, the VM's own OS firewall (via SSH), assigns a
+public IP if missing, and verifies with a curl:
+
+```bash
+bash deploy/network-setup.sh            # auto-finds the sysdesignlab instance
+bash deploy/network-setup.sh --ip <PUBLIC_IP>
+```
+
+First run it interactively once so it can install the `oci` CLI and walk you
+through the one-time API-key setup (paste one public key into the console).
+If you'd rather do it by hand in the console:
+
 1. **Networking → Virtual cloud networks →** your VCN → **Security Lists →** the default one.
 2. **Add Ingress Rules** (leave source `0.0.0.0/0`):
    | Port | Purpose |
@@ -40,6 +55,7 @@ part (you, ~15 min) and the deploy script (one command).
    | `22` | SSH (usually already there) |
    | `80` | HTTP — **required** |
    | `443` | HTTPS — add now if you'll attach a domain |
+   Repeat for any Network Security Group attached to the instance's VNIC.
 3. Note the instance's **Public IP** from the instance page.
 
 ### A4. Quick sanity check
@@ -52,26 +68,43 @@ ssh -i ~/.ssh/sysdesignlab ubuntu@<PUBLIC_IP> "echo connected && uname -m && fre
 
 ## Part B — deploy (one command)
 
-### B1. Copy the code from your Mac
-From the repo root on your Mac:
+### B1. Build locally + copy to the VM (one command)
+
+The client is **built on your Mac** and shipped prebuilt — the VM never compiles it.
+`deploy/push.sh` does the whole loop: builds `client/dist` locally, syncs the repo
+(including the prebuilt dist), then runs the server-side deploy:
 
 ```bash
-# create the target dir owned by your ssh user first
+# from the repo root on your Mac
+bash deploy/push.sh <PUBLIC_IP>
+```
+
+That's it. Prefer this. If you'd rather do it by hand:
+
+```bash
+# 1. build the client locally (required — the VM no longer builds it on deploy)
+npm run build
+
+# 2. create the target dir owned by your ssh user first
 ssh -i ~/.ssh/sysdesignlab ubuntu@<PUBLIC_IP> "sudo mkdir -p /opt/sysdesignlab && sudo chown ubuntu /opt/sysdesignlab"
 
-# sync the repo (excludes node_modules, git, local DB, local .env)
+# 3. sync the repo (now INCLUDES prebuilt client/dist; excludes node_modules, git,
+#    local DB, local .env)
 rsync -avz --delete \
-  --exclude node_modules --exclude .git --exclude client/dist \
+  --exclude node_modules --exclude .git \
   --exclude server/data --exclude .env \
   -e "ssh -i ~/.ssh/sysdesignlab" \
   ./ ubuntu@<PUBLIC_IP>:/opt/sysdesignlab/
 ```
 
+> `client/dist` is not in git — always ship it with the rsync above (or use `push.sh`).
+
 ### B2. Run the deploy script
 ```bash
 ssh -i ~/.ssh/sysdesignlab ubuntu@<PUBLIC_IP> "sudo bash /opt/sysdesignlab/deploy/deploy.sh"
 ```
-It installs Node 22 + nginx, `npm install`, builds the client, generates a
+It installs Node 22 + nginx, `npm install`, uses the prebuilt `client/dist` you shipped
+(building on the server only as a fallback if none is present), generates a
 `SESSION_SECRET`, seeds the DB (first run only), and starts a systemd service.
 
 ### B3. Open it
@@ -85,7 +118,8 @@ It installs Node 22 + nginx, `npm install`, builds the client, generates a
 |---|---|
 | See the live logs | `ssh ... "journalctl -u sysdesignlab -f"` |
 | Restart the app | `ssh ... "sudo systemctl restart sysdesignlab"` |
-| Push an update | re-run the `rsync` in B1, then `sudo bash deploy/deploy.sh` |
+| Push an update | `bash deploy/push.sh <PUBLIC_IP>` (builds locally, syncs incl. dist, deploys) |
+| Reachable locally but not via the public IP | `bash deploy/network-setup.sh [--ip <IP>]` — opens security list(s) + NSGs + OS firewall, assigns a public IP, verifies |
 | Back up user data | `sudo tar czf /opt/sysdesignlab/backup-$(date +%F).tar.gz -C /opt/sysdesignlab server/data` |
 
 Deploy is idempotent: it **keeps** your `.env` (SESSION_SECRET) and **never reseeds** an

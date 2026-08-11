@@ -60,9 +60,10 @@ NODE_ENV=production SESSION_SECRET="$(openssl rand -hex 32)" npm run start
 
 The app runs **unchanged** on a free always-on Oracle VM (Express + SQLite + built client on one
 origin). See **`deploy/ORACLE.md`** for the console runbook (signup, VM creation, ports) and
-`deploy/deploy.sh` for the one-command setup (Node 22, nginx, systemd, seeding). Deploys are
-idempotent — re-running the script after a `rsync` code push keeps your `SESSION_SECRET`, Google
-keys, and user data.
+`deploy/deploy.sh` for the server-side setup (Node 22, nginx, systemd, seeding). The client is
+**built on your Mac** and shipped prebuilt — `bash deploy/push.sh <PUBLIC_IP>` builds, syncs
+`client/dist`, and deploys in one command. Deploys are idempotent — re-running keeps your
+`SESSION_SECRET`, Google keys, and user data.
 
 ## Scripts
 
