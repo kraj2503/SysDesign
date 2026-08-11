@@ -34,6 +34,14 @@ export default function QuizPlayer({
   timePerQuestionSec = 45,
   passThreshold = 60,
 }: QuizPlayerProps) {
+  console.log("rendering QuizPlayer");
+  console.log( "quiz player props",
+    topicSlug,
+    topicTitle,
+    (count = 8),
+    (timePerQuestionSec = 45),
+    (passThreshold = 60),
+  );
   const { refresh } = useProgress()
   const [questions, setQuestions] = useState<Question[] | null>(null)
   const [token, setToken] = useState<string | null>(null)
@@ -62,6 +70,7 @@ export default function QuizPlayer({
     api
       .getQuiz(topicSlug, count)
       .then((session) => {
+        console.log(session)
         setQuestions(session.questions)
         setToken(session.token)
       })
@@ -69,7 +78,7 @@ export default function QuizPlayer({
   }, [topicSlug, count, retakeNonce])
 
   const current = questions?.[index] ?? null
-
+console.log(current)
   // per-question timer
   useEffect(() => {
     if (!current || revealed || submitted) return
