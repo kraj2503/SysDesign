@@ -30,7 +30,6 @@ echo "    app dir:  $APP_DIR"
 # --- 1. system packages -----------------------------------------------------
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -y
-# Added g++-10 because better-sqlite3 requires C++20 support (missing in default g++-9 on Ubuntu 20.04)
 apt-get install -y ca-certificates curl git nginx build-essential python3 pkg-config g++-10
 
 # --- 2. Node.js (>= 20.12 for process.loadEnvFile; 22 preferred) -------------
@@ -56,18 +55,16 @@ chown -R "$APP_USER:$APP_USER" "$SERVER_DIR/data"
 cd "$APP_DIR"
 
 echo "==> Clearing old build artifacts for a fresh build..."
-# We must remove the old build directories and recreate them with the correct 
-# ownership. We also create an isolated .npm-cache so the restricted user doesn't 
-# try to write to the ubuntu user's directory.
 rm -rf "$APP_DIR/node_modules" "$APP_DIR/client/dist" "$APP_DIR/dist" "$APP_DIR/.npm-cache"
 mkdir -p "$APP_DIR/node_modules" "$APP_DIR/client/dist" "$APP_DIR/dist" "$APP_DIR/.npm-cache"
 
-# Scope ownership to the runtime-writable/build dirs only.
-chown -R "$APP_USER:$APP_USER" "$APP_DIR/node_modules" "$APP_DIR/client/dist" "$APP_DIR/dist" "$APP_DIR/.npm-cache"
+# Ensure package-lock.json exists so chown doesn't fail if it's a fresh clone
+touch "$APP_DIR/package-lock.json"
+
+# Scope ownership to the runtime-writable/build dirs + package-lock.json
+chown -R "$APP_USER:$APP_USER" "$APP_DIR/node_modules" "$APP_DIR/client/dist" "$APP_DIR/dist" "$APP_DIR/.npm-cache" "$APP_DIR/package-lock.json"
 
 echo "==> Installing dependencies and building..."
-# We pass CXX=g++-10 so node-gyp compiles better-sqlite3 successfully.
-# We pass npm_config_cache so npm has a writable place to store cache.
 sudo -u "$APP_USER" env CXX=g++-10 npm_config_cache="$APP_DIR/.npm-cache" npm install --no-audit --no-fund
 sudo -u "$APP_USER" env npm_config_cache="$APP_DIR/.npm-cache" npm run build
 
