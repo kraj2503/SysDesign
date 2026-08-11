@@ -1,0 +1,61 @@
+# SysDesignLab nginx — HTTPS (Cloudflare origin certificate) variant.
+#
+# Use this when serving the domain through Cloudflare with SSL/TLS mode
+# "Full (strict)". Browser traffic terminates TLS at Cloudflare's edge; this
+# config encrypts Cloudflare -> nginx with a free Cloudflare origin cert.
+#
+# Setup (on the VM):
+#   1. sudo mkdir -p /etc/nginx/ssl
+#   2. Paste the Cloudflare origin certificate -> /etc/nginx/ssl/sysdesignlab-origin.pem
+#   3. Paste the private key                    -> /etc/nginx/ssl/sysdesignlab-origin.key
+#      (Cloudflare dashboard: SSL/TLS -> Origin Server -> Create Certificate)
+#   4. sudo chmod 600 /etc/nginx/ssl/sysdesignlab-origin.key
+#   5. sudo install -m 644 deploy/nginx.sysdesignlab.https \
+#        /etc/nginx/sites-available/sysdesignlab
+#   6. sudo nginx -t && sudo systemctl reload nginx
+#
+# deploy/deploy.sh will NOT overwrite this file once it contains ssl_certificate
+# (it preserves an existing TLS config on re-deploys).
+
+# 443 — HTTPS. Cloudflare connects here with SNI = your domain, and the origin
+# cert is valid for that hostname, so Full (strict) passes.
+server {
+  listen 443 ssl;
+  listen [::]:443 ssl;
+  server_name _;
+
+  ssl_certificate     /etc/nginx/ssl/sysdesignlab-origin.pem;
+  ssl_certificate_key /etc/nginx/ssl/sysdesignlab-origin.key;
+  ssl_protocols TLSv1.2 TLSv1.3;
+
+  client_max_body_size 10m;
+
+  location / {
+    proxy_pass http://127.0.0.1:4000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 60s;
+  }
+}
+
+# 80 — plain HTTP. Kept so direct bare-IP access still works; Cloudflare's edge
+# redirects its own HTTP traffic to 443 before it reaches us.
+server {
+  listen 80 default_server;
+  listen [::]:80 default_server;
+  server_name _;
+  client_max_body_size 10m;
+
+  location / {
+    proxy_pass http://127.0.0.1:4000;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_read_timeout 60s;
+  }
+}

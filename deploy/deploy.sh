@@ -115,7 +115,14 @@ else
 fi
 
 # --- 8. nginx ------------------------------------------------------------------
-install -m 644 "$APP_DIR/deploy/nginx.sysdesignlab" "/etc/nginx/sites-available/$SERVICE_NAME"
+# Preserve an HTTPS config that certbot set up (it edits this file to add 443 +
+# cert paths). Only (re)install our plain-HTTP config while no TLS config exists,
+# otherwise the next re-deploy would wipe certbot's work and kill HTTPS.
+if [ -f "/etc/nginx/sites-available/$SERVICE_NAME" ] && grep -q "ssl_certificate" "/etc/nginx/sites-available/$SERVICE_NAME"; then
+  echo "==> nginx config already has TLS (certbot) — leaving it untouched."
+else
+  install -m 644 "$APP_DIR/deploy/nginx.sysdesignlab" "/etc/nginx/sites-available/$SERVICE_NAME"
+fi
 ln -sf "/etc/nginx/sites-available/$SERVICE_NAME" "/etc/nginx/sites-enabled/$SERVICE_NAME"
 rm -f /etc/nginx/sites-enabled/default
 nginx -t
