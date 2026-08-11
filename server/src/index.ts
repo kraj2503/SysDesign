@@ -169,4 +169,5 @@ app.use((err: unknown, _req: express.Request, res: express.Response, _next: expr
 const PORT = Number(process.env.PORT ?? 4000)
 app.listen(PORT, () => {
   console.log(`SysDesignLab API listening on http://localhost:${PORT}`)
+  console.log('this is version 0.1.1')
 })
