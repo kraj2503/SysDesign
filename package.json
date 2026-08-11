@@ -1,7 +1,7 @@
 {
   "name": "sysdesignlab",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Interactive High-Level System Design learning app",
   "workspaces": [
     "client",
